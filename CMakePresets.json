@@ -1,0 +1,51 @@
+{
+    "version": 8,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 29,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "description": "Base configuration inherited by all presets",
+            "binaryDir": "${sourceDir}/build/${presetName}"
+        },
+        {
+            "name": "vcpkg",
+            "hidden": true,
+            "description": "Additional configuration for using vcpkg",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        },
+        {
+          "name": "cl-ninja-vcpkg",
+          "displayName": "CL Vcpkg Ninja Multi",
+          "description": "Configure with vcpkg toolchain and generate Ninja project files for all configurations",
+          "generator": "Ninja Multi-Config",
+          "inherits": [
+              "base",
+              "vcpkg"
+          ],
+          "cacheVariables": {
+              "CMAKE_CXX_COMPILER": "cl.exe",
+              "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+          }
+      }
+    ],
+    "buildPresets": [
+        {
+          "name": "cl-ninja-vcpkg-debug",
+          "configurePreset": "cl-ninja-vcpkg",
+          "displayName": "Debug",
+          "configuration": "Debug"
+      },
+      {
+          "name": "cl-ninja-vcpkg-release",
+          "configurePreset": "cl-ninja-vcpkg",
+          "displayName": "Release",
+          "configuration": "Release"
+      }
+    ]
+  }
+  
