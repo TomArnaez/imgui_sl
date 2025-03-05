@@ -1,0 +1,7 @@
+ninja_dyndep_version = 1.0
+build CMakeFiles\imgui_test.dir\Debug\src\main.cpp.obj: dyndep
+
+build CMakeFiles\imgui_test.dir\Debug\src\vk\texture.cpp.obj: dyndep
+
+build CMakeFiles\imgui_test.dir\Debug\src\vk\vma.cpp.obj: dyndep
+

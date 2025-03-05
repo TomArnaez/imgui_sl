@@ -82,6 +82,9 @@
         "numeric": "cpp",
         "cinttypes": "cpp",
         "shared_mutex": "cpp",
-        "mdspan": "cpp"
+        "mdspan": "cpp",
+        "any": "cpp",
+        "ranges": "cpp",
+        "valarray": "cpp"
     }
 }

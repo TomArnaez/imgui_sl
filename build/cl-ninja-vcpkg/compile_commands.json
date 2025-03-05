@@ -1,0 +1,56 @@
+[
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DAPP_USE_VULKAN_DEBUG_REPORT -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"Debug\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /Ob0 /Od /RTC1 -std:c++latest -MDd -Zi /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\Debug\\src\\main.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\Debug\\src\\main.cpp.obj /FdCMakeFiles\\imgui_test.dir\\Debug\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\main.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\main.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\Debug\\src\\main.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DAPP_USE_VULKAN_DEBUG_REPORT -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"Debug\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /Ob0 /Od /RTC1 -std:c++latest -MDd -Zi /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\Debug\\src\\vk\\texture.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\Debug\\src\\vk\\texture.cpp.obj /FdCMakeFiles\\imgui_test.dir\\Debug\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\vk\\texture.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\vk\\texture.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\Debug\\src\\vk\\texture.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DAPP_USE_VULKAN_DEBUG_REPORT -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"Debug\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /Ob0 /Od /RTC1 -std:c++latest -MDd -Zi /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\Debug\\src\\vk\\vma.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\Debug\\src\\vk\\vma.cpp.obj /FdCMakeFiles\\imgui_test.dir\\Debug\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\vk\\vma.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\vk\\vma.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\Debug\\src\\vk\\vma.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"Release\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -std:c++latest -MD /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\Release\\src\\main.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\Release\\src\\main.cpp.obj /FdCMakeFiles\\imgui_test.dir\\Release\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\main.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\main.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\Release\\src\\main.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"Release\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -std:c++latest -MD /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\Release\\src\\vk\\texture.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\Release\\src\\vk\\texture.cpp.obj /FdCMakeFiles\\imgui_test.dir\\Release\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\vk\\texture.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\vk\\texture.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\Release\\src\\vk\\texture.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"Release\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -std:c++latest -MD /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\Release\\src\\vk\\vma.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\Release\\src\\vk\\vma.cpp.obj /FdCMakeFiles\\imgui_test.dir\\Release\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\vk\\vma.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\vk\\vma.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\Release\\src\\vk\\vma.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"RelWithDebInfo\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob1 /DNDEBUG -std:c++latest -MD -Zi /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\main.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\main.cpp.obj /FdCMakeFiles\\imgui_test.dir\\RelWithDebInfo\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\main.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\main.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\main.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"RelWithDebInfo\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob1 /DNDEBUG -std:c++latest -MD -Zi /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\vk\\texture.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\vk\\texture.cpp.obj /FdCMakeFiles\\imgui_test.dir\\RelWithDebInfo\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\vk\\texture.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\vk\\texture.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\vk\\texture.cpp.obj"
+},
+{
+  "directory": "C:/dev/repos/imgui_test/build/cl-ninja-vcpkg",
+  "command": "C:\\PROGRA~1\\MICROS~1\\2022\\COMMUN~1\\VC\\Tools\\MSVC\\1442~1.344\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_SHARED -DGLFW_DLL -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_IMPLEMENTATION -DVMA_STATIC_VULKAN_FUNCTIONS=0 -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -DCMAKE_INTDIR=\\\"RelWithDebInfo\\\" -IC:\\dev\\repos\\imgui_test\\src -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include -external:IC:\\dev\\repos\\imgui_test\\build\\cl-ninja-vcpkg\\vcpkg_installed\\x64-windows\\include\\vma -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob1 /DNDEBUG -std:c++latest -MD -Zi /wd4251 /wd4275 /utf-8 @CMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\vk\\vma.cpp.obj.modmap /FoCMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\vk\\vma.cpp.obj /FdCMakeFiles\\imgui_test.dir\\RelWithDebInfo\\ /FS -c C:\\dev\\repos\\imgui_test\\src\\vk\\vma.cpp",
+  "file": "C:\\dev\\repos\\imgui_test\\src\\vk\\vma.cpp",
+  "output": "CMakeFiles\\imgui_test.dir\\RelWithDebInfo\\src\\vk\\vma.cpp.obj"
+}
+]

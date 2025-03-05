@@ -14,7 +14,7 @@
 #include <cstdlib>
 
 #include <detailed_exception.hpp>
-#include <vk/vma_context.hpp>
+#include <vk/vma.hpp>
 #include <vk/texture.hpp>
 #include <vulkan_error.hpp>
 
@@ -56,6 +56,10 @@ struct vulkan_state {
     vk::Device                          device = VK_NULL_HANDLE;
     uint32_t                            queue_family = UINT32_MAX;
     vk::Queue                           queue = VK_NULL_HANDLE;
+
+    std::unique_ptr<vma::allocator>       context;
+
+
     VkDebugReportCallbackEXT            debug_report = VK_NULL_HANDLE;
     vk::PipelineCache                   pipeline_cache = VK_NULL_HANDLE;
     vk::DescriptorPool                  descriptor_pool = VK_NULL_HANDLE;
@@ -198,6 +202,11 @@ private:
         VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_state.device);
 
         vk_state.queue = vk_state.device.getQueue(vk_state.queue_family, 0);
+
+        vk_state.context = std::make_unique<vma::allocator>(
+            vk_state.device,
+            vk_state.physical_device,
+            vk_state.instance);
 
         // --- Create Descriptor Pool ---
         std::array<vk::DescriptorPoolSize, 1> pool_sizes = {{

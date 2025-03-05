@@ -1,0 +1,3 @@
+C:/dev/repos/imgui_test/build/cl-ninja-vcpkg/CMakeFiles/imgui_test.dir
+C:/dev/repos/imgui_test/build/cl-ninja-vcpkg/CMakeFiles/edit_cache.dir
+C:/dev/repos/imgui_test/build/cl-ninja-vcpkg/CMakeFiles/rebuild_cache.dir
