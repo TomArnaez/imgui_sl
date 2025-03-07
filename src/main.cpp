@@ -57,8 +57,7 @@ struct vulkan_state {
     uint32_t                            queue_family = UINT32_MAX;
     vk::Queue                           queue = VK_NULL_HANDLE;
 
-    std::unique_ptr<vma::allocator>       context;
-
+    std::unique_ptr<vma::allocator>     context;
 
     VkDebugReportCallbackEXT            debug_report = VK_NULL_HANDLE;
     vk::PipelineCache                   pipeline_cache = VK_NULL_HANDLE;
