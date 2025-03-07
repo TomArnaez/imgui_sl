@@ -15,31 +15,9 @@
 
 #include <detailed_exception.hpp>
 #include <vk/vma.hpp>
+#include <vk/vulkan_app.hpp>
 #include <vk/texture.hpp>
 #include <vulkan_error.hpp>
-
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-
-static bool is_extension_available(const std::vector<vk::ExtensionProperties>& properties, const char* extension) {
-    for (const auto& prop : properties)
-        if (strcmp(prop.extensionName, extension) == 0)
-            return true;
-    return false;
-}
-
-VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(
-    VkDebugReportFlagsEXT      flags,
-    VkDebugReportObjectTypeEXT object_type,
-    uint64_t                   object,
-    size_t                     location,
-    int32_t                    message_code,
-    const char*                p_layer_prefix,
-    const char*                p_message,
-    void*                      /*p_user_data*/
-) {
-    spdlog::error("Validation Layer ({}): {}", p_layer_prefix, p_message);
-    return VK_FALSE;
-}
 
 struct frame_resource {
     vk::CommandPool                   command_pool = VK_NULL_HANDLE;
@@ -51,15 +29,8 @@ struct frame_resource {
 };
 
 struct vulkan_state {           
-    vk::Instance                        instance = VK_NULL_HANDLE;
-    vk::PhysicalDevice                  physical_device = VK_NULL_HANDLE;
-    vk::Device                          device = VK_NULL_HANDLE;
-    uint32_t                            queue_family = UINT32_MAX;
-    vk::Queue                           queue = VK_NULL_HANDLE;
-
     std::unique_ptr<vma::allocator>     context;
 
-    VkDebugReportCallbackEXT            debug_report = VK_NULL_HANDLE;
     vk::PipelineCache                   pipeline_cache = VK_NULL_HANDLE;
     vk::DescriptorPool                  descriptor_pool = VK_NULL_HANDLE;
     vk::SurfaceKHR                      surface = VK_NULL_HANDLE;
@@ -72,10 +43,11 @@ struct vulkan_state {
     uint32_t                            width = 0;
     uint32_t                            height = 0;
     uint32_t                            image_acquired_semaphore_index = 0;
-};      
+}; 
 
 class app_state {       
-    vulkan_state vk_state;      
+    vulkan_state vk_state;
+    std::unique_ptr<vulkan_core> core;
     GLFWwindow* window = nullptr;
     std::string window_title = "DEAR IMGUI";
     std::vector<const char*> instance_extensions;
@@ -116,65 +88,6 @@ private:
     }
 
     void init_vulkan() {
-        VULKAN_HPP_DEFAULT_DISPATCHER.init();
-
-        vk::ApplicationInfo app_info("Dear ImGui Vulkan App", 1, "No Engine", 1, VK_API_VERSION_1_1);
-
-        auto available_extensions = vk::enumerateInstanceExtensionProperties(nullptr);
-        if (is_extension_available(available_extensions, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
-            instance_extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-        std::vector<const char*> layers;
-
-#ifdef APP_USE_VULKAN_DEBUG_REPORT
-        layers.emplace_back("VK_LAYER_KHRONOS_validation");
-        instance_extensions.push_back("VK_EXT_debug_report");
-#endif
-
-        auto instance_ci = vk::InstanceCreateInfo()
-            .setPApplicationInfo(&app_info)
-            .setPEnabledExtensionNames(instance_extensions)
-            .setPEnabledLayerNames(layers);
-
-        vk_state.instance = vk::createInstance(instance_ci);
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_state.instance);
-
-#ifdef APP_USE_VULKAN_DEBUG_REPORT
-        vk_state.debug_report = vk_state.instance.createDebugReportCallbackEXT(
-            vk::DebugReportCallbackCreateInfoEXT()
-                .setFlags(vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning)
-                .setPfnCallback(debug_report_callback)
-            );
-#endif
-
-        // --- Select Physical Device ---
-        auto physical_devices = vk_state.instance.enumeratePhysicalDevices();
-        if (physical_devices.empty())
-            throw detailed_exception("No GPUs with Vulkan support found.");
-
-        // Prefer discrete GPUs
-        for (const auto& pd : physical_devices) {
-            vk::PhysicalDeviceProperties props = pd.getProperties();
-            if (props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
-                vk_state.physical_device = pd;
-                break;
-            }
-        }
-        if (!vk_state.physical_device)
-            vk_state.physical_device = physical_devices[0];
-
-        // --- Select Queue Family ---
-        auto queue_properties = vk_state.physical_device.getQueueFamilyProperties();
-        for (uint32_t i = 0; i < static_cast<uint32_t>(queue_properties.size()); i++) {
-            if (queue_properties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-                vk_state.queue_family = i;
-                break;
-            }
-        }
-        if (vk_state.queue_family == UINT32_MAX)
-            throw detailed_exception("Failed to find a queue family index with graphics support.");
-
-        // --- Create Device ---
         std::vector<const char*> device_extensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
             VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
@@ -184,35 +97,15 @@ private:
             VK_KHR_MULTIVIEW_EXTENSION_NAME,
             VK_KHR_MAINTENANCE2_EXTENSION_NAME
         };
-
-        float queue_priority = 1.0f;
-        vk::DeviceQueueCreateInfo queue_ci({}, vk_state.queue_family, 1, &queue_priority);
-
-        vk::PhysicalDeviceTimelineSemaphoreFeatures timeline_features(true);
-        vk::PhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features(true);
-        dynamic_rendering_features.pNext = &timeline_features;
-
-        auto device_ci = vk::DeviceCreateInfo()
-            .setQueueCreateInfos(queue_ci)
-            .setPEnabledExtensionNames(device_extensions)
-            .setPNext(&dynamic_rendering_features);
-
-        vk_state.device = vk_state.physical_device.createDevice(device_ci);
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_state.device);
-
-        vk_state.queue = vk_state.device.getQueue(vk_state.queue_family, 0);
-
-        vk_state.context = std::make_unique<vma::allocator>(
-            vk_state.device,
-            vk_state.physical_device,
-            vk_state.instance);
+        
+        core = std::make_unique<vulkan_core>(instance_extensions, device_extensions);
 
         // --- Create Descriptor Pool ---
         std::array<vk::DescriptorPoolSize, 1> pool_sizes = {{
             vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE)
         }};
 
-        vk_state.descriptor_pool = vk_state.device.createDescriptorPool(
+        vk_state.descriptor_pool = core->device().createDescriptorPool(
             vk::DescriptorPoolCreateInfo()
                 .setPoolSizes(pool_sizes)
                 .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
@@ -221,10 +114,10 @@ private:
 
         // --- Create Window Surface ---
         VkSurfaceKHR raw_surface;
-        VK_CHECK(glfwCreateWindowSurface(static_cast<VkInstance>(vk_state.instance), window, nullptr, &raw_surface));
+        VK_CHECK(glfwCreateWindowSurface(static_cast<VkInstance>(core->instance()), window, nullptr, &raw_surface));
         vk_state.surface = raw_surface;
 
-        if (!vk_state.physical_device.getSurfaceSupportKHR(vk_state.queue_family, vk_state.surface))
+        if (!(core->physical_device().getSurfaceSupportKHR(core->graphics_queue_family(), vk_state.surface)))
             throw detailed_exception("Error: no WSI support on physical device");
 
         // Choose a surface format
@@ -264,11 +157,11 @@ private:
         ImGui_ImplVulkan_InitInfo init_info = {};
         init_info.PipelineRenderingCreateInfo = pipeline_rendering_ci;
         init_info.UseDynamicRendering = true;
-        init_info.Instance = static_cast<VkInstance>(vk_state.instance);
-        init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(vk_state.physical_device);
-        init_info.Device = static_cast<VkDevice>(vk_state.device);
-        init_info.QueueFamily = vk_state.queue_family;
-        init_info.Queue = static_cast<VkQueue>(vk_state.queue);
+        init_info.Instance = static_cast<VkInstance>(core->instance());
+        init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(core->physical_device());
+        init_info.Device = static_cast<VkDevice>(core->device());
+        init_info.QueueFamily = core->graphics_queue_family();
+        init_info.Queue = static_cast<VkQueue>(core->graphics_queue());
         init_info.PipelineCache = vk_state.pipeline_cache;
         init_info.DescriptorPool = static_cast<VkDescriptorPool>(vk_state.descriptor_pool);
         init_info.Subpass = 0;
@@ -333,7 +226,7 @@ private:
                 render_and_present_frame(draw_data);
         }
 
-        vk_state.device.waitIdle();
+        core->device().waitIdle();
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -343,7 +236,7 @@ private:
     }
 
     vk::SurfaceFormatKHR select_surface_format(const std::vector<vk::Format>& requested_formats, vk::ColorSpaceKHR requested_color_space) {
-        auto available_formats = vk_state.physical_device.getSurfaceFormatsKHR(vk_state.surface);
+        auto available_formats = core->physical_device().getSurfaceFormatsKHR(vk_state.surface);
         if (available_formats.size() == 1 && available_formats[0].format == vk::Format::eUndefined) {
             return { requested_formats[0], requested_color_space };
         }
@@ -360,26 +253,26 @@ private:
         auto old_swapchain = vk_state.swapchain;
 
         if (vk_state.swapchain) {
-            vk_state.device.destroySwapchainKHR(vk_state.swapchain, nullptr);
+            core->device().destroySwapchainKHR(vk_state.swapchain, nullptr);
             vk_state.swapchain = VK_NULL_HANDLE;
         }
 
-        vk_state.device.waitIdle();
+        core->device().waitIdle();
         for (auto& frame : vk_state.swapchain_frames) {
             if (frame.backbuffer_view)
-                vk_state.device.destroyImageView(frame.backbuffer_view, nullptr);
+                core->device().destroyImageView(frame.backbuffer_view, nullptr);
             if (frame.command_pool)
-                vk_state.device.destroyCommandPool(frame.command_pool, nullptr);
+                core->device().destroyCommandPool(frame.command_pool, nullptr);
             if (frame.render_completed_semaphore)
-                vk_state.device.destroySemaphore(frame.render_completed_semaphore);
+                core->device().destroySemaphore(frame.render_completed_semaphore);
             if (frame.image_acquired_semaphore)
-                vk_state.device.destroySemaphore(frame.image_acquired_semaphore);
+                core->device().destroySemaphore(frame.image_acquired_semaphore);
             if (frame.render_fence)
-                vk_state.device.destroyFence(frame.render_fence);
+                core->device().destroyFence(frame.render_fence);
         }
         
         vk_state.swapchain_frames.clear();
-        vk::SurfaceCapabilitiesKHR surface_capabilities = vk_state.physical_device.getSurfaceCapabilitiesKHR(vk_state.surface);
+        vk::SurfaceCapabilitiesKHR surface_capabilities = core->physical_device().getSurfaceCapabilitiesKHR(vk_state.surface);
 
         vk::SwapchainCreateInfoKHR swapchain_ci{};
         swapchain_ci.surface = vk_state.surface;
@@ -410,8 +303,8 @@ private:
             swapchain_ci.imageExtent = surface_capabilities.currentExtent;
         }
 
-        vk_state.swapchain = vk_state.device.createSwapchainKHR(swapchain_ci, nullptr);
-        auto swapchain_images = vk_state.device.getSwapchainImagesKHR(vk_state.swapchain);
+        vk_state.swapchain = core->device().createSwapchainKHR(swapchain_ci, nullptr);
+        auto swapchain_images = core->device().getSwapchainImagesKHR(vk_state.swapchain);
         vk_state.image_count = static_cast<uint32_t>(swapchain_images.size());
 
         for (auto& swapchain_image : swapchain_images) {
@@ -420,18 +313,18 @@ private:
             vk::ImageViewCreateInfo view_ci({}, swapchain_image, vk::ImageViewType::e2D,
                 vk_state.surface_format.format, vk::ComponentMapping(),
                 vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
-            frame.backbuffer_view = vk_state.device.createImageView(view_ci, nullptr);
+            frame.backbuffer_view = core->device().createImageView(view_ci, nullptr);
 
-            vk::CommandPoolCreateInfo pool_ci({}, vk_state.queue_family);
-            frame.command_pool = vk_state.device.createCommandPool(pool_ci, nullptr);
+            vk::CommandPoolCreateInfo pool_ci({}, core->graphics_queue_family());
+            frame.command_pool = core->device().createCommandPool(pool_ci, nullptr);
 
             vk::CommandBufferAllocateInfo cmd_alloc_info(frame.command_pool, vk::CommandBufferLevel::ePrimary, 1);
-            frame.command_buffers = vk_state.device.allocateCommandBuffers(cmd_alloc_info);
+            frame.command_buffers = core->device().allocateCommandBuffers(cmd_alloc_info);
 
             vk::SemaphoreCreateInfo sem_ci;
-            frame.image_acquired_semaphore = vk_state.device.createSemaphore(vk::SemaphoreCreateInfo());
-            frame.render_completed_semaphore = vk_state.device.createSemaphore(vk::SemaphoreCreateInfo());
-            frame.render_fence = vk_state.device.createFence(vk::FenceCreateInfo());
+            frame.image_acquired_semaphore = core->device().createSemaphore(vk::SemaphoreCreateInfo());
+            frame.render_completed_semaphore = core->device().createSemaphore(vk::SemaphoreCreateInfo());
+            frame.render_fence = core->device().createFence(vk::FenceCreateInfo());
             
             vk_state.swapchain_frames.push_back(frame);
         }
@@ -441,7 +334,7 @@ private:
         vk::Semaphore image_acquired_semaphore = vk_state.swapchain_frames[vk_state.image_acquired_semaphore_index].image_acquired_semaphore;
         vk::Fence render_fence = vk_state.swapchain_frames[vk_state.image_acquired_semaphore_index].render_fence;
 
-        auto result_pair = vk_state.device.acquireNextImageKHR(vk_state.swapchain, UINT64_MAX,
+        auto result_pair = core->device().acquireNextImageKHR(vk_state.swapchain, UINT64_MAX,
                                                                 image_acquired_semaphore, VK_NULL_HANDLE);
         vk::Result result = result_pair.result;
         uint32_t frame_index = result_pair.value; 
@@ -453,7 +346,7 @@ private:
 
         frame_resource& current_frame = vk_state.swapchain_frames[frame_index];
         
-        vk_state.device.resetCommandPool(current_frame.command_pool, {});
+        core->device().resetCommandPool(current_frame.command_pool, {});
         vk::CommandBuffer command_buffer = current_frame.command_buffers[0];
         command_buffer.begin(vk::CommandBufferBeginInfo()
             .setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
@@ -523,7 +416,7 @@ private:
         command_buffer.end();
 
         vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        vk_state.queue.submit(
+        core->graphics_queue().submit(
             vk::SubmitInfo()
                 .setCommandBuffers({ command_buffer })
                 .setWaitSemaphores(image_acquired_semaphore)
@@ -533,78 +426,58 @@ private:
         );
 
         auto swapchain_vector = { vk_state.swapchain };
-        vk_state.queue.presentKHR(
+        core->graphics_queue().presentKHR(
             vk::PresentInfoKHR()
                 .setWaitSemaphores(current_frame.render_completed_semaphore)
                 .setSwapchains(swapchain_vector)
                 .setImageIndices(frame_index)
         );
 
-        vk_state.device.waitForFences(render_fence, true, UINT64_MAX);
-        vk_state.device.resetFences(render_fence);
+        core->device().waitForFences(render_fence, true, UINT64_MAX);
+        core->device().resetFences(render_fence);
 
         vk_state.image_acquired_semaphore_index = (vk_state.image_acquired_semaphore_index + 1) % vk_state.swapchain_frames.size();
     }
 
     void cleanup() {
-        vk_state.device.waitIdle();
+        core->device().waitIdle();
     
         // Destroy all frame resources
         for (auto& frame : vk_state.swapchain_frames) {
             if (frame.backbuffer_view)
-                vk_state.device.destroyImageView(frame.backbuffer_view);
-                frame.backbuffer_view = VK_NULL_HANDLE;
+                core->device().destroyImageView(frame.backbuffer_view);
+            frame.backbuffer_view = VK_NULL_HANDLE;
             if (frame.command_pool)
-                vk_state.device.destroyCommandPool(frame.command_pool);
-                frame.command_pool = VK_NULL_HANDLE;
+                core->device().destroyCommandPool(frame.command_pool);
+            frame.command_pool = VK_NULL_HANDLE;
             if (frame.render_completed_semaphore)
-                vk_state.device.destroySemaphore(frame.render_completed_semaphore);
-                frame.render_completed_semaphore = VK_NULL_HANDLE;
+                core->device().destroySemaphore(frame.render_completed_semaphore);
+            frame.render_completed_semaphore = VK_NULL_HANDLE;
             if (frame.image_acquired_semaphore)
-                vk_state.device.destroySemaphore(frame.image_acquired_semaphore);
-                frame.image_acquired_semaphore = VK_NULL_HANDLE;
+                core->device().destroySemaphore(frame.image_acquired_semaphore);
+            frame.image_acquired_semaphore = VK_NULL_HANDLE;
             if (frame.render_fence)
-                vk_state.device.destroyFence(frame.render_fence);
-                frame.render_fence = VK_NULL_HANDLE;
+                core->device().destroyFence(frame.render_fence);
+            frame.render_fence = VK_NULL_HANDLE;
         }
         vk_state.swapchain_frames.clear();
     
         // Destroy swapchain
         if (vk_state.swapchain) {
-            vk_state.device.destroySwapchainKHR(vk_state.swapchain);
+            core->device().destroySwapchainKHR(vk_state.swapchain);
             vk_state.swapchain = VK_NULL_HANDLE;
         }
     
         // Destroy descriptor pool
         if (vk_state.descriptor_pool) {
-            vk_state.device.destroyDescriptorPool(vk_state.descriptor_pool);
+            core->device().destroyDescriptorPool(vk_state.descriptor_pool);
             vk_state.descriptor_pool = VK_NULL_HANDLE;
         }
     
-        // Destroy device
-        if (vk_state.device) {
-            vk_state.device.destroy();
-            vk_state.device = VK_NULL_HANDLE;
-        }
-    
-        // Destroy debug callback
-    #ifdef APP_USE_VULKAN_DEBUG_REPORT
-        if (vk_state.debug_report) {
-            vk_state.instance.destroyDebugReportCallbackEXT(vk_state.debug_report);
-            vk_state.debug_report = VK_NULL_HANDLE;
-        }
-    #endif
-    
         // Destroy surface
         if (vk_state.surface) {
-            vk_state.instance.destroySurfaceKHR(vk_state.surface);
+            core->instance().destroySurfaceKHR(vk_state.surface);
             vk_state.surface = VK_NULL_HANDLE;
-        }
-    
-        // Destroy instance
-        if (vk_state.instance) {
-            vk_state.instance.destroy();
-            vk_state.instance = VK_NULL_HANDLE;
         }
     }
 };

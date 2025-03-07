@@ -2,28 +2,12 @@
 
 #include <vulkan/vulkan.hpp>
 #include <mdspan>
-#include <spdlog.h>
+#include <spdlog/spdlog.h>
 #include <detailed_exception.hpp>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
-constexpr uint32_t FRAMES_IN_FLIGHT = 3;
-constexpr vk::Format OFFSCREEN_FORMAT = vk::Format::eR8G8B8A8Unorm;
-
-class vulkan_app {
-    struct frame_data {
-        std::vector<vk::CommandBuffer>       transfer_cmd;
-        std::vector<vk::UniqueCommandBuffer> compute_cmd;
-        std::vector<vk::UniqueCommandBuffer> graphics_cmd;
-
-        vk::Semaphore       timeline_semaphore;
-        uint64_t            timeline_value = 0;
-
-        vk::Image           offscreen_image;
-        vk::ImageView       image_view;
-        vk::DeviceMemory    image_memory;
-    };
-
+class vulkan_core {
     VkDebugReportCallbackEXT debug_report_ = VK_NULL_HANDLE;
 
     vk::Instance        instance_;
@@ -42,107 +26,6 @@ class vulkan_app {
     vk::CommandPool transfer_pool_;
     vk::CommandPool compute_pool_;
     vk::CommandPool graphics_pool_;
-
-    std::array<frame_data, FRAMES_IN_FLIGHT> frames;
-    uint64_t frame_index = 0;
-    
-    vk::PipelineLayout      pipeline_layout_;
-    vk::Pipeline            graphics_pipeline_;
-
-    void create_frames(std::extents<uint32_t, 2> extents, uint32_t transfer_family_index, uint32_t compute_family_index, uint32_t graphics_family_index) {
-        transfer_pool_ = device_.createCommandPool(
-            vk::CommandPoolCreateInfo()
-                .setQueueFamilyIndex(transfer_family_index)
-        );
-        
-        compute_pool_ = device_.createCommandPool(
-            vk::CommandPoolCreateInfo()
-                .setQueueFamilyIndex(compute_family_index)
-        );
-        
-        graphics_pool_ = device_.createCommandPool(
-            vk::CommandPoolCreateInfo()
-                .setQueueFamilyIndex(graphics_family_index)
-        );
-        
-        for (auto& frame : frames) {
-            frame.timeline_semaphore = device_.createSemaphore(
-                vk::SemaphoreCreateInfo()
-                    .setPNext(&vk::SemaphoreTypeCreateInfo()
-                        .setSemaphoreType(vk::SemaphoreType::eTimeline)
-                    )
-            );
-
-            frame.offscreen_image = device_.createImage(
-                vk::ImageCreateInfo()
-                    .setImageType(vk::ImageType::e2D)
-                    .setFormat(OFFSCREEN_FORMAT)
-                    .setExtent({extents.extent(1), extents.extent(0), 1})
-                    .setMipLevels(1)
-                    .setArrayLayers(1)
-                    .setTiling(vk::ImageTiling::eOptimal)
-                    .setUsage(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc)
-                    .setSharingMode(vk::SharingMode::eExclusive));
-                
-            vk::MemoryRequirements2 mem_reqs = device_.getImageMemoryRequirements2({frame.offscreen_image});
-
-            frame.image_memory = device_.allocateMemory(
-                vk::MemoryAllocateInfo()
-                    .setAllocationSize(mem_reqs.memoryRequirements.size)
-                    .setMemoryTypeIndex(find_memory_type(mem_reqs.memoryRequirements.memoryTypeBits)));
-
-            device_.bindImageMemory2(
-                vk::BindImageMemoryInfo()
-                    .setImage(frame.offscreen_image)
-                    .setMemory(frame.image_memory));
-
-            frame.image_view = device_.createImageView(
-                vk::ImageViewCreateInfo()
-                    .setImage(frame.offscreen_image)
-                    .setViewType(vk::ImageViewType::e2D)
-                    .setFormat(OFFSCREEN_FORMAT)
-                    .setSubresourceRange(
-                        vk::ImageSubresourceRange()
-                            .setAspectMask(vk::ImageAspectFlagBits::eColor)
-                            .setBaseMipLevel(0)
-                            .setLevelCount(1)
-                            .setBaseArrayLayer(0)
-                            .setLayerCount(1)
-                    )
-                );
-
-            frame.transfer_cmd = device_.allocateCommandBuffers(
-                vk::CommandBufferAllocateInfo()
-                    .setCommandPool(transfer_pool_)
-                    .setLevel(vk::CommandBufferLevel::ePrimary)
-                    .setCommandBufferCount(1)
-            );
-
-            frame.compute_cmd = device_.allocateCommandBuffers(
-                vk::CommandBufferAllocateInfo()
-                    .setCommandPool(compute_pool_)
-                    .setLevel(vk::CommandBufferLevel::ePrimary)
-                    .setCommandBufferCount(1)
-            );
-
-            frame.graphics_cmd = device_.allocateCommandBuffers(
-                vk::CommandBufferAllocateInfo()
-                    .setCommandPool(graphics_pool_)
-                    .setLevel(vk::CommandBufferLevel::ePrimary)
-                    .setCommandBufferCount(1)
-            );
-        }
-    }
-
-    // TODO: Remore
-    uint32_t find_memory_type(uint32_t filter) {
-        auto props = physical_device_.getMemoryProperties();
-        for(uint32_t i = 0; i < props.memoryTypeCount; ++i)
-            if(filter & (1 << i) && (props.memoryTypes[i].propertyFlags & 
-                vk::MemoryPropertyFlagBits::eDeviceLocal))
-                return i;
-        throw std::runtime_error("No suitable memory type");
-    }
 
     static bool is_extension_available(const std::vector<vk::ExtensionProperties>& properties, const char* extension) {
         for (const auto& prop : properties)
@@ -209,7 +92,7 @@ class vulkan_app {
     }
 
 public:
-    vulkan_app(std::vector<const char*> instance_extensions, std::vector<const char*> device_extensions) {
+    vulkan_core(std::vector<const char*> instance_extensions, std::vector<const char*> device_extensions) {
             VULKAN_HPP_DEFAULT_DISPATCHER.init();
 
             vk::ApplicationInfo app_info("Dear ImGui Vulkan App", 1, "No Engine", 1, VK_API_VERSION_1_1);
@@ -234,7 +117,7 @@ public:
             VULKAN_HPP_DEFAULT_DISPATCHER.init(instance_);
 
             #ifdef APP_USE_VULKAN_DEBUG_REPORT
-            debug_report_ = vk_state.instance.createDebugReportCallbackEXT(
+            debug_report_ = instance_.createDebugReportCallbackEXT(
             vk::DebugReportCallbackCreateInfoEXT()
                 .setFlags(vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning)
                 .setPfnCallback(debug_report_callback)
@@ -301,36 +184,31 @@ public:
             graphics_queue_ = device_.getQueue(graphics_queue_family_, family_indices[graphics_queue_family_]++);
         }
 
-    ~vulkan_app() {
-        // Destroy pipeline first
-        device_.destroyPipeline(graphics_pipeline_);
-        device_.destroyPipelineLayout(pipeline_layout_);
-
-        // Destroy per-frame resources
-        for(auto& frame : frames) {
-            // Free command buffers
-            device_.freeCommandBuffers(transfer_pool_, frame.transfer_cmd);
-            device_.freeCommandBuffers(compute_pool_, frame.compute_cmd);
-            device_.freeCommandBuffers(graphics_pool_, frame.graphics_cmd);
-
-            device_.destroySemaphore(frame.timeline_semaphore);
-            device_.destroyImageView(frame.image_view);
-            device_.destroyImage(frame.offscreen_image);
-            device_.freeMemory(frame.image_memory);
-        }
-
+    ~vulkan_core() {
         // Destroy command pools last
         device_.destroyCommandPool(transfer_pool_);
         device_.destroyCommandPool(compute_pool_);
         device_.destroyCommandPool(graphics_pool_);
     }
 
+    vk::Instance instance() const {
+        return instance_;
+    }
+
     vk::Device device() const {
         return device_;
     }
 
+    vk::PhysicalDevice physical_device() const {
+        return physical_device_;
+    }
+
     vk::Queue graphics_queue() const {
         return graphics_queue_;
+    }
+
+    uint32_t graphics_queue_family() const {
+        return graphics_queue_family_;
     }
 
     vk::Queue compute_queue() const {
