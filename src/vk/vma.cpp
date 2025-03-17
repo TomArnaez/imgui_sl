@@ -1,12 +1,11 @@
-#include <vk_mem_alloc.h>
-
 #include <vulkan/vulkan.hpp>
-#include <vk/vma.hpp>
 #include <vulkan_error.hpp>
 
 namespace vma {
 
-allocator::allocator(vk::Device device, vk::PhysicalDevice physical_device, vk::Instance instance) {
+allocator::allocator(vk::Instance instance, vk::Device device, vk::PhysicalDevice physical_device) {
+    spdlog::trace("Constructing {}", typeid(*this).name());
+
     const auto& d = VULKAN_HPP_DEFAULT_DISPATCHER;
 
     VmaVulkanFunctions functions {
@@ -19,61 +18,43 @@ allocator::allocator(vk::Device device, vk::PhysicalDevice physical_device, vk::
         .device = device,
         .pVulkanFunctions = &functions,
         .instance = instance,
-        .vulkanApiVersion = VK_API_VERSION_1_2
+        .vulkanApiVersion = VK_API_VERSION_1_3
     };
 
     VK_CHECK(vmaCreateAllocator(&create_info, &allocator_));
 }
 
 allocator::~allocator() {
+    spdlog::trace("Destructing {}", typeid(*this).name());
+
     vmaDestroyAllocator(allocator_);
 }
 
-staging_buffer allocator::create_staging_buffer(vk::DeviceSize size) {
-    vk::BufferCreateInfo buffer_info{};
-    buffer_info.size = size;
-    buffer_info.usage = vk::BufferUsageFlagBits::eTransferSrc;
-    buffer_info.sharingMode = vk::SharingMode::eExclusive;
+image allocator::create_image(const vk::ImageCreateInfo& image_info) {
+    spdlog::trace("Creating image with extent {0:d}x{1:d}x{2:d}, format: {3:d}",
+        image_info.extent.width, image_info.extent.height, image_info.extent.depth, static_cast<uint32_t>(image_info.format));
 
-    VmaAllocationCreateInfo alloc_create_info{};
-    alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-    alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-
-    VkBuffer buffer_c;
-    VmaAllocation allocation_c;
-    VK_CHECK(vmaCreateBuffer(
-        allocator_,
-        reinterpret_cast<const VkBufferCreateInfo*>(&buffer_info),
-        &alloc_create_info,
-        &buffer_c,
-        &allocation_c,
-        nullptr
-    ));
-
-    void* mapping;
-    VK_CHECK(vmaMapMemory(allocator_, allocation_c, &mapping));
-
-    return { vk::Buffer(buffer_c), allocation_c, static_cast<std::byte*>(mapping) };
-}
-
-void allocator::destroy_staging_buffer(const staging_buffer& buffer) {
-    vmaUnmapMemory(allocator_, buffer.allocation);
-    vmaDestroyBuffer(allocator_, static_cast<VkBuffer>(buffer.buffer), buffer.allocation);
-}
-
-std::pair<vk::Image, VmaAllocation> allocator::create_image(const vk::ImageCreateInfo& image_info) {
     VkImageCreateInfo vkImageInfo = static_cast<VkImageCreateInfo>(image_info);
     VmaAllocationCreateInfo allocCreateInfo = {};
     
-    VkImage image;
+    VkImage handle;
     VmaAllocation allocation;
-    VK_CHECK(vmaCreateImage(allocator_, &vkImageInfo, &allocCreateInfo, &image, &allocation, nullptr));
-    
-    return { vk::Image(image), allocation };
+    VK_CHECK(vmaCreateImage(allocator_, &vkImageInfo, &allocCreateInfo, &handle, &allocation, nullptr));
+
+    image image = {
+        .handle = handle,
+        .extent = image_info.extent,
+        .format = image_info.format,
+        .allocation = allocation
+    };
+
+    return image;
 }
 
-void allocator::destroy_image(vk::Image image, VmaAllocation allocation) {
-    vmaDestroyImage(allocator_, static_cast<VkImage>(image), allocation);
+void allocator::destroy_image(image& image) {
+    spdlog::trace("Destroying image with extent: {}x{}x{}", image.extent.width, image.extent.height, image.extent.depth);
+
+    vmaDestroyImage(allocator_, static_cast<VkImage>(image.handle), image.allocation);
 }
 
 

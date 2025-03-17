@@ -28,8 +28,7 @@
               "vcpkg"
           ],
           "cacheVariables": {
-              "CMAKE_CXX_COMPILER": "cl.exe",
-              "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+              "CMAKE_CXX_COMPILER": "cl.exe"
           }
       }
     ],

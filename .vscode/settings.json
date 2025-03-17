@@ -85,6 +85,21 @@
         "mdspan": "cpp",
         "any": "cpp",
         "ranges": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "random": "cpp",
+        "parentbad": "cpp",
+        "csignal": "cpp",
+        "deque": "cpp",
+        "future": "cpp",
+        "memory_resource": "cpp",
+        "queue": "cpp",
+        "regex": "cpp",
+        "stack": "cpp",
+        "typeindex": "cpp",
+        "unordered_set": "cpp",
+        "target": "cpp",
+        "codecvt": "cpp",
+        "resumable": "cpp",
+        "stream_ref": "cpp"
     }
 }

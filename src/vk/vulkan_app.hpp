@@ -182,10 +182,28 @@ public:
             transfer_queue_ = device_.getQueue(transfer_queue_family_, family_indices[transfer_queue_family_]++);
             compute_queue_ = device_.getQueue(compute_queue_family_, family_indices[compute_queue_family_]++);
             graphics_queue_ = device_.getQueue(graphics_queue_family_, family_indices[graphics_queue_family_]++);
+
+            transfer_pool_ = device_.createCommandPool(
+                vk::CommandPoolCreateInfo()
+                    .setQueueFamilyIndex(transfer_queue_family_)
+                    .setFlags(vk::CommandPoolCreateFlagBits::eTransient |  // Optimized for short-lived buffers
+                              vk::CommandPoolCreateFlagBits::eResetCommandBuffer)  // Allow buffer resets
+            );
+    
+            compute_pool_ = device_.createCommandPool(
+                vk::CommandPoolCreateInfo()
+                    .setQueueFamilyIndex(compute_queue_family_)
+                    .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)  // Allow individual buffer resets
+            );
+    
+            graphics_pool_ = device_.createCommandPool(
+                vk::CommandPoolCreateInfo()
+                    .setQueueFamilyIndex(graphics_queue_family_)
+                    .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)  // Allow individual buffer resets
+            );
         }
 
     ~vulkan_core() {
-        // Destroy command pools last
         device_.destroyCommandPool(transfer_pool_);
         device_.destroyCommandPool(compute_pool_);
         device_.destroyCommandPool(graphics_pool_);
@@ -209,6 +227,10 @@ public:
 
     uint32_t graphics_queue_family() const {
         return graphics_queue_family_;
+    }
+
+    vk::CommandPool graphics_command_pool() const {
+        return graphics_pool_;
     }
 
     vk::Queue compute_queue() const {

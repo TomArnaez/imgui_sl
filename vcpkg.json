@@ -9,6 +9,6 @@
         "glfw3",
         "spdlog",
         "vulkan-memory-allocator",
-        "nlohmann-json"
+        "shader-slang"
     ]
 }
