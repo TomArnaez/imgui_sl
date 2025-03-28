@@ -44,14 +44,53 @@ uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties,
     throw std::runtime_error("Failed to find suitable memory type!");
 }
 
+const std::vector<const char*> validation_layers = {
+    "VK_LAYER_KHRONOS_validation"
+};
+
+bool check_validation_support() {
+    auto availale_layers = vk::enumerateInstanceLayerProperties();
+    for (const char* layer_name : validation_layers) {
+        bool layer_found = false;
+        for (const auto& layerProperties : availale_layers)
+            if (strcmp(layer_name, layerProperties.layerName) == 0) {
+                layer_found = true;
+                break;
+            }
+        if (!layer_found) return false;
+    }
+    return true;
+}
+
 VulkanContext initializeVulkan() {
     VulkanContext context;
     VULKAN_HPP_DEFAULT_DISPATCHER.init();
 
-    vk::ApplicationInfo appInfo("VulkanCompute", 1, "No Engine", 1, VK_API_VERSION_1_4);
+    std::vector<const char*> extensions = {
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+    };
+
+    vk::ApplicationInfo app_info("VulkanCompute", 1, "No Engine", 1, VK_API_VERSION_1_4);
+
+    auto debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT()
+        .setMessageSeverity(vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
+        .setMessageType(vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
+        .setPfnUserCallback([](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+            VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+            void* user_data) -> VkBool32 {
+             std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
+             return VK_FALSE;
+         });
     
-    vk::InstanceCreateInfo instanceCI({}, &appInfo);
-    context.instance = vk::createInstanceUnique(instanceCI);
+    auto instance_create_info = vk::InstanceCreateInfo()
+         .setPApplicationInfo(&app_info)
+         .setPEnabledLayerNames(validation_layers)
+         .setPEnabledExtensionNames(extensions);
+
+    vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT> instance_structure_chain(instance_create_info, debug_create_info);
+
+    context.instance = vk::createInstanceUnique(instance_structure_chain.get<vk::InstanceCreateInfo>());
     VULKAN_HPP_DEFAULT_DISPATCHER.init(context.instance.get());
 
     auto physicalDevices = context.instance->enumeratePhysicalDevices();
@@ -61,33 +100,30 @@ VulkanContext initializeVulkan() {
             if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eCompute) {
                 context.physical_device = pd;
                 context.queueFamilyIndex = i;
-
                 break;
             }
         }
-        if (context.physical_device) break; // Break outer loop as soon as a device is found
+        if (context.physical_device) break;
     }
 
     float queuePriority = 1.0f;
-    vk::DeviceQueueCreateInfo queueCI({}, context.queueFamilyIndex, 1, &queuePriority);
+    vk::DeviceQueueCreateInfo queue_create_info({}, context.queueFamilyIndex, 1, &queuePriority);
 
-    std::vector<const char*> deviceExtensions = {
+    std::vector<const char*> device_extensions = {
         VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     };
 
-    vk::PhysicalDeviceShaderObjectFeaturesEXT shader_object_features{};
-    shader_object_features.shaderObject = VK_TRUE;
+    auto shader_object_features = vk::PhysicalDeviceShaderObjectFeaturesEXT()
+        .setShaderObject(true);
+
+    auto device_create_info = vk::DeviceCreateInfo()
+        .setQueueCreateInfos(queue_create_info)
+        .setPEnabledExtensionNames(device_extensions);
 
     vk::StructureChain<
         vk::DeviceCreateInfo,
         vk::PhysicalDeviceShaderObjectFeaturesEXT
-    > device_chain;
-
-    auto& device_create_info = device_chain.get<vk::DeviceCreateInfo>();
-    device_create_info.setQueueCreateInfos(queueCI)
-            .setPEnabledExtensionNames(deviceExtensions);
-
-    device_chain.get<vk::PhysicalDeviceShaderObjectFeaturesEXT>() = shader_object_features;
+    > device_chain(device_create_info, shader_object_features);
 
     context.device = context.physical_device.createDevice(device_chain.get<vk::DeviceCreateInfo>());
     context.queue = context.device.getQueue(context.queueFamilyIndex, 0);

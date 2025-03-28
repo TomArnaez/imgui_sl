@@ -7,8 +7,8 @@
             "features": [ "glfw-binding",  "vulkan-binding", "docking-experimental" ]
         },
         "glfw3",
+        "shader-slang",
         "spdlog",
-        "vulkan-memory-allocator",
-        "shader-slang"
+        "vulkan-memory-allocator"
     ]
 }

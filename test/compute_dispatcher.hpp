@@ -111,7 +111,7 @@ public:
 
             if (!program)
                 std::runtime_error("Failed to create slang program");
-
+            
             slang::ProgramLayout* layout = program->getLayout();
             slang::EntryPointReflection* entry_point_reflection = layout->getEntryPointByIndex(0);
 
