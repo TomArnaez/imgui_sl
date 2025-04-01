@@ -6,12 +6,16 @@ extern const static uint WORKGROUP_SIZE_Z;
 groupshared uint shared_data[WORKGROUP_SIZE_X / SUBGROUP_SIZE];
 
 struct span<T> {
-    T* data;
-    uint size;
+    private T* data_;
+    private uint size_;
 
     __subscript(uint x) -> T {
-        get { return data[x]; }
-        set { data[x] = newValue; }
+        get { return data_[x]; }
+        set { data_[x] = newValue; }
+    }
+
+    property uint size {
+        get { return size_; }
     }
 };
 

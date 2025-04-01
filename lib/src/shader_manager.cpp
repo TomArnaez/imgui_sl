@@ -27,7 +27,8 @@ void shader_manager::throw_exception_with_slang_diagnostics(
 shader_object shader_manager::load_shader(
     const std::string& module_name,
     const std::string& entry_point_name,
-    const std::array<uint32_t, 3>& workgroup_sizes
+    const std::array<uint32_t, 3>& workgroup_sizes,
+    const std::vector<slang::SpecializationArg> specialisation_args
 ) {
     spdlog::info("Loading shader: {}, entry point: {}, workgroups: {}", module_name, entry_point_name, workgroup_sizes);
 
@@ -41,6 +42,12 @@ shader_object shader_manager::load_shader(
 
     if (!entry_point)
         throw detailed_exception("Failed to load entry point");
+
+	if (specialisation_args.size() > 0) {
+        Slang::ComPtr<slang::IComponentType> specialized_entry_point;
+
+		entry_point->specialize(specialisation_args.data(), specialisation_args.size(), specialized_entry_point.writeRef(), diagnostics.writeRef());
+	}
 
     Slang::ComPtr<slang::IModule> workgroup_module = create_workgroup_module(workgroup_sizes);
 

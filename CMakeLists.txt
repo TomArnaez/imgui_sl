@@ -4,12 +4,12 @@ project(imgui_test VERSION 0.1.0 LANGUAGES C CXX)
 add_subdirectory(test)
 
 add_library(vulkan_engine
-    src/shader_manager.cpp
-    src/allocator.cpp
-    src/vulkan_core.cpp
+    lib/src/shader_manager.cpp
+    lib/src/allocator.cpp
+    lib/src/vulkan_core.cpp
 )
 
-target_include_directories(vulkan_engine PUBLIC src/include)
+target_include_directories(vulkan_engine PUBLIC lib/include PRIVATE lib/src)
 
 FetchContent_Declare(
     slang

@@ -22,7 +22,9 @@ public:
     shader_object load_shader(
         const std::string& module_name,
         const std::string& entry_point_name,
-        const std::array<uint32_t, 3>& workgroup_sizes);
+        const std::array<uint32_t, 3>& workgroup_sizes,
+		const std::vector<slang::SpecializationArg> specialisation_args = {}
+    );
 private:
     void throw_exception_with_slang_diagnostics(const std::string& message, const std::source_location& location = std::source_location::current());
 
