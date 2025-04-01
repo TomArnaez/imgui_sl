@@ -13,6 +13,7 @@ void inclusive_scan(
 	typed_buffer<T>& input,
 	typed_buffer<T>& output,
 	typed_buffer<TAccumulation>& group_sums,
+
 	const shader_manager& manager,
 	vk::CommandBuffer cmd_buffer
 ) {

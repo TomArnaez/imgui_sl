@@ -1,6 +1,7 @@
 #include <vulkan/vulkan.hpp>
 #include <shader_manager.hpp>
 #include <spdlog/fmt/ranges.h>
+#include <ranges>
 
 namespace vkengine {
 
@@ -77,33 +78,44 @@ shader_object shader_manager::load_shader(
     if (!spirv_code)
         throw_exception_with_slang_diagnostics("Failed to create spirv code");
 
+	slang::ProgramLayout* program_layout = program->getLayout();
+
+    for (auto* reflection : std::views::iota(0u, program_layout->getEntryPointCount())
+        | std::views::transform([=, this](auto i) {return program_layout->getEntryPointByIndex(i); })) {
+		log_scope(reflection->getVarLayout());
+    }
+
     slang::TypeLayoutReflection* type_layout = entry_point_reflection->getTypeLayout();
 
     auto push_constant_range = vk::PushConstantRange().setStageFlags(stage);
-    auto binding_range_index = type_layout->getSubObjectRangeBindingRangeIndex(0);
-    slang::BindingType binding_type = type_layout->getBindingRangeType(binding_range_index);
-    if (binding_type == slang::BindingType::PushConstant) {
-        auto constant_buffer_type_layout = type_layout->getBindingRangeLeafTypeLayout(binding_range_index);
-        auto element_type_layout = constant_buffer_type_layout->getElementTypeLayout();
-        auto element_size = element_type_layout->getSize();
-        push_constant_range.setOffset(0).setSize(element_size);
-        spdlog::debug("Push constant size: {}", element_size);
+
+    for (uint32_t sub_object_idx : std::views::iota(0u, static_cast<uint32_t>(type_layout->getSubObjectRangeCount()))) {
+        slang::BindingType binding_type = type_layout->getBindingRangeType(sub_object_idx);
+        switch (binding_type) {
+        case slang::BindingType::PushConstant:
+			auto constant_buffer_type_layout = type_layout->getBindingRangeLeafTypeLayout(sub_object_idx);
+            auto element_type_layout = constant_buffer_type_layout->getElementTypeLayout();
+			auto element_size = element_type_layout->getSize();
+            push_constant_range.setOffset(0).setSize(element_size);
+            spdlog::debug("Push constant size: {}", element_size);
+            break;
+        }
     }
 
-    size_t push_constant_size = 0;
     uint32_t param_count = entry_point_reflection->getParameterCount();
 
-    spdlog::debug("Parameter count: {}", param_count);
     for (uint32_t param_idx = 0; param_idx < param_count; ++param_idx) {
         slang::VariableLayoutReflection* param = entry_point_reflection->getParameterByIndex(param_idx);
 
-        slang::TypeLayoutReflection* type_layout = param->getTypeLayout();
+        slang::TypeLayoutReflection*    type_layout = param->getTypeLayout();
         slang::ParameterCategory        category = param->getCategory();
+        uint32_t                        category_count = param->getCategoryCount();
 
         spdlog::debug(
-            "Index: {}, name: {}, category: {}, offset: {}, alignment: {}, size: {}",
+            "Param at index: {}, name: {}, category_count: {}, category: {}, offset: {}, alignment: {}, size: {}",
             param_idx,
             param->getName(),
+            category_count,
             static_cast<uint32_t>(category),
             param->getOffset(),
             type_layout->getAlignment(),
@@ -191,6 +203,42 @@ Slang::ComPtr<slang::IModule> shader_manager::create_workgroup_module(const std:
         throw detailed_exception("Failed to load workgroup module");
 
     return workgroup_module;
+}
+
+void shader_manager::log_scope(slang::VariableLayoutReflection* scope_variable_layout) {
+    auto type_layout = scope_variable_layout->getTypeLayout();
+
+    switch (type_layout->getKind()) {
+    case slang::TypeReflection::Kind::Struct:
+    {
+        spdlog::debug("Scope type is struct");
+        for (auto* param : std::views::iota(0u, type_layout->getFieldCount())| std::views::transform([&](auto i) {return type_layout->getFieldByIndex(i); })) {
+            log_variable_layout(param);
+        }
+        break;
+    }
+    case slang::TypeReflection::Kind::ConstantBuffer:
+        spdlog::debug("Scope type is constant buffer");
+        log_scope(type_layout->getElementVarLayout());
+        break;
+    case slang::TypeReflection::Kind::ParameterBlock:
+        spdlog::debug("Scope type is parameter block");
+        break;
+    default:
+        spdlog::debug("Scope type is unknown");
+    }
+}
+
+void shader_manager::log_variable_layout(slang::VariableLayoutReflection* variable_layout) {
+	auto type_layout = variable_layout->getTypeLayout();
+    
+	spdlog::debug("Variable name: {}", variable_layout->getName());
+	spdlog::debug("Type name: {}", type_layout->getName());
+
+    if (type_layout->getSize() > 0) {
+        spdlog::debug("Size in bytes: {}", type_layout->getSize());
+		spdlog::debug("Alignment in bytes: {}", type_layout->getAlignment());
+    }
 }
 
 }

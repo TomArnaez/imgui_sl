@@ -8,6 +8,10 @@
 
 namespace vkengine {
 
+struct program_reflection {
+
+};
+
 struct shader_object {
     vk::PipelineLayout pipeline_layout;
     vk::PushConstantRange push_constant_range;
@@ -32,6 +36,9 @@ private:
     void create_subgroup_module();
     bool check_valid_workgroup_sizes(const std::array<uint32_t, 3>& workgroup_sizes);
     Slang::ComPtr<slang::IModule> create_workgroup_module(const std::array<uint32_t, 3>& workgroup_sizes);
+
+    void log_scope(slang::VariableLayoutReflection* scope_variable_layout);
+	void log_variable_layout(slang::VariableLayoutReflection* variable_layout);
 
     std::reference_wrapper<vulkan_core>     vulkan;
 

@@ -38,6 +38,17 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
+# Handle shaders
+
+file(GLOB_RECURSE SHADERS "shaders/*.slang")
+set(SHADER_OUTPUT_DIR ${CMAKE_BINARY_DIR}/shaders)
+
+add_custom_target(copy_shaders ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUTPUT_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy ${SHADERS} ${SHADER_OUTPUT_DIR}
+    DEPENDS ${SHADERS}
+)
+
 target_link_libraries(vulkan_engine
     PUBLIC
         Vulkan::Vulkan
@@ -57,4 +68,5 @@ target_compile_definitions(vulkan_engine PUBLIC
     VMA_IMPLEMENTATION
     VMA_STATIC_VULKAN_FUNCTIONS=0
     VMA_DYNAMIC_VULKAN_FUNCTIONS=1
+    "VKENGINE_SHADER_DIR=\"${SHADER_OUTPUT_DIR}\""
 )

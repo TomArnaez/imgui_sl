@@ -2,6 +2,7 @@
 #include <shader_manager.hpp>
 #include <allocator.hpp>
 #include <algorithms/inclusive_scan.hpp>
+#include <algorithms/histogram.hpp>
 #include <typed_buffer.hpp>
 #include <vulkan_core.hpp>
 #include <iostream>
@@ -27,7 +28,7 @@ int main() {
     auto& props = core.physical_device_properties();
 
     auto inclusive_scan_shader = shader_manager.load_shader(
-        "C:\\dev\\repos\\imgui_test\\shaders\\inclusive_scan.slang",
+        std::string(VKENGINE_SHADER_DIR) + "\\inclusive_scan.slang",
         "workgroup_inclusive_scan",
         {128, 1, 1}
     );
