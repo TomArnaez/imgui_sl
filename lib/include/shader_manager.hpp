@@ -8,10 +8,6 @@
 
 namespace vkengine {
 
-struct program_reflection {
-
-};
-
 struct shader_object {
     vk::PipelineLayout pipeline_layout;
     vk::PushConstantRange push_constant_range;

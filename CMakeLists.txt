@@ -64,9 +64,10 @@ target_link_libraries(vulkan_engine
 target_compile_features(vulkan_engine PRIVATE cxx_std_23)
 target_compile_definitions(vulkan_engine PUBLIC 
     "$<$<CONFIG:Debug>:APP_USE_VULKAN_DEBUG_REPORT>"
+    "VKENGINE_SHADER_DIR=\"${SHADER_OUTPUT_DIR}\""
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+    PRIVATE
     VMA_IMPLEMENTATION
     VMA_STATIC_VULKAN_FUNCTIONS=0
     VMA_DYNAMIC_VULKAN_FUNCTIONS=1
-    "VKENGINE_SHADER_DIR=\"${SHADER_OUTPUT_DIR}\""
 )

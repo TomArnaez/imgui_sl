@@ -1,5 +1,6 @@
 #include <vulkan/vulkan.hpp>
 #include <shader_manager.hpp>
+#include <shader_layout.hpp>
 #include <spdlog/fmt/ranges.h>
 #include <ranges>
 
@@ -80,27 +81,16 @@ shader_object shader_manager::load_shader(
 
 	slang::ProgramLayout* program_layout = program->getLayout();
 
+    shader_layout shader_layout = create_pipeline_layout(program_layout, vulkan.get());
+
+    spdlog::debug("Push constant range: {}", shader_layout.push_constant_ranges[0].size);
+
     for (auto* reflection : std::views::iota(0u, program_layout->getEntryPointCount())
         | std::views::transform([=, this](auto i) {return program_layout->getEntryPointByIndex(i); })) {
 		log_scope(reflection->getVarLayout());
     }
 
     slang::TypeLayoutReflection* type_layout = entry_point_reflection->getTypeLayout();
-
-    auto push_constant_range = vk::PushConstantRange().setStageFlags(stage);
-
-    for (uint32_t sub_object_idx : std::views::iota(0u, static_cast<uint32_t>(type_layout->getSubObjectRangeCount()))) {
-        slang::BindingType binding_type = type_layout->getBindingRangeType(sub_object_idx);
-        switch (binding_type) {
-        case slang::BindingType::PushConstant:
-			auto constant_buffer_type_layout = type_layout->getBindingRangeLeafTypeLayout(sub_object_idx);
-            auto element_type_layout = constant_buffer_type_layout->getElementTypeLayout();
-			auto element_size = element_type_layout->getSize();
-            push_constant_range.setOffset(0).setSize(element_size);
-            spdlog::debug("Push constant size: {}", element_size);
-            break;
-        }
-    }
 
     uint32_t param_count = entry_point_reflection->getParameterCount();
 
@@ -130,15 +120,15 @@ shader_object shader_manager::load_shader(
         .setCodeSize(spirv_code->getBufferSize())
         .setPName(entry_point_name.data())
         .setPCode(static_cast<const uint32_t*>(spirv_code->getBufferPointer()))
-        .setPushConstantRanges(push_constant_range)
+        .setPushConstantRanges(shader_layout.push_constant_ranges)
     );
 
     if (shader_ext.result != vk::Result::eSuccess)
         throw detailed_exception("Failed to create shader object");
 
     shader_object shader_obj = {
-        .pipeline_layout = vulkan.get().device().createPipelineLayout(vk::PipelineLayoutCreateInfo().setPushConstantRanges(push_constant_range)),
-        .push_constant_range = push_constant_range,
+        .pipeline_layout = shader_layout.pipeline_layout,
+        .push_constant_range = shader_layout.push_constant_ranges[0],
         .shader_ext = shader_ext.value,
         .stage = stage
     };

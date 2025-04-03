@@ -1,9 +1,7 @@
 #pragma once
 
 #include <vulkan_core.hpp>
-
-typedef struct VmaAllocator_T* VmaAllocator;
-typedef struct VmaAllocation_T* VmaAllocation;
+#include <vma/vk_mem_alloc.h>
 
 namespace vkengine {
 
@@ -12,12 +10,14 @@ struct image {
     vk::Extent3D extent;
     vk::Format format;
     VmaAllocation allocation;
+    VmaAllocationInfo allocation_info;
 };
 
 struct buffer {
     vk::Buffer handle;
     vk::DeviceSize size;
     VmaAllocation allocation;
+    VmaAllocationInfo allocation_info;
 };
 
 class allocator {
@@ -31,10 +31,16 @@ public:
     allocator(allocator&&) = delete;
     allocator& operator=(allocator&&) = delete;
 
-    image create_image(const vk::ImageCreateInfo& image_info) const;
+    image create_image(
+        const vk::ImageCreateInfo& image_info,
+        const VmaAllocationCreateInfo& allocation_create_info
+    ) const;
     void destroy_image(image& image) const;
 
-    buffer create_buffer(const vk::BufferCreateInfo& buffer_info) const;
+    buffer create_buffer(
+        const vk::BufferCreateInfo& buffer_info,
+        const VmaAllocationCreateInfo& allocation_create_info
+    ) const;
     void destroy_buffer(buffer& buffer) const;
 };
 
