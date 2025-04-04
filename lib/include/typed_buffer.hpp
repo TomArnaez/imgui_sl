@@ -58,6 +58,10 @@ public:
 		return buffer_address;
 	}
 
+	vk::Buffer vk_buffer_handle() const {
+		return buffer.handle;
+	}
+
 	T* mapping() const {
 		T* mapped_data = static_cast<T*>(buffer.allocation_info.pMappedData);
 		if (!mapped_data)
@@ -72,6 +76,7 @@ public:
 	uint32_t size_bytes() const {
 		return buffer.size;
 	}
+
 private:
 	std::reference_wrapper<allocator> allocator;
 	vk::DeviceAddress buffer_address;

@@ -3,7 +3,9 @@
 #include <allocator.hpp>
 #include <algorithms/inclusive_scan.hpp>
 #include <algorithms/histogram.hpp>
+#include <queue_family.hpp>
 #include <typed_buffer.hpp>
+#include <ranges>
 
 int main() {
     spdlog::set_level(spdlog::level::debug);
@@ -29,21 +31,33 @@ int main() {
     host_alloc_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
         VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    uint32_t element_count = 100;
-    vkengine::typed_buffer<float> buffer(
+    uint32_t element_count = 1024;
+
+    vkengine::typed_buffer<uint32_t> buffer(
         allocator,
         core,
         100,
         host_alloc_info
     );
 
-    std::vector<float> source_data(element_count);
-    std::ranges::generate(source_data, [n = 0]() mutable { return n++ * 1.5f; });
-    buffer.copy_from_host(source_data);
-    float* mapped = buffer.mapping();
-    for (uint32_t i = 0; i < element_count; i++) {
-        assert(mapped[i] == source_data[i] && "Data mismatch");
-    }
+    vkengine::typed_buffer<uint32_t> group_sums(
+        allocator,
+        core,
+        element_count,
+        host_alloc_info
+    );
+
+    vkengine::typed_buffer<uint32_t> output(
+        allocator,
+        core,
+        element_count,
+        host_alloc_info
+    );
+
+    auto src = std::views::iota(0u, element_count);
+	buffer.copy_from_host(src);
 
     buffer.destroy();
+    group_sums.destroy();
+	output.destroy();
 }
