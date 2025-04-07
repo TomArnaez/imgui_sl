@@ -25,9 +25,9 @@ void workgroup_inclusive_scan(
     uniform span<uint> input_span,
     uniform span<uint> output,
     uniform span<uint> group_sums,
-    uint3 group_id: SV_GroupID,
+                              uint3 group_id: SV_GroupID,
     uint3 global_thread_id: SV_DispatchThreadID,
-    uint group_thread_id: SV_GroupThreadID
+                              uint group_thread_id: SV_GroupThreadID
 ) {
     uint global_thread_idx = global_thread_id.x;
 

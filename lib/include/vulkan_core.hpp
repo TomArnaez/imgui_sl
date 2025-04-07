@@ -1,9 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan_handles.hpp>
-#include <mdspan>
-#include <spdlog/spdlog.h>
-#include <detailed_exception.hpp>
+#include <gpu.hpp>
 
 namespace vkengine {
 
@@ -17,8 +15,8 @@ private:
     VkDebugReportCallbackEXT debug_report_ = VK_NULL_HANDLE;
 
     vk::Instance        instance_;
+	gpu                 gpu_;
     vk::Device          device_;
-    vk::PhysicalDevice  physical_device_;
     vk::Queue           transfer_queue_;
     uint32_t            transfer_queue_family_;
     vk::Queue           compute_queue_;
@@ -28,8 +26,6 @@ private:
     vk::CommandPool     transfer_pool_;
     vk::CommandPool     compute_pool_;
     vk::CommandPool     graphics_pool_;
-
-    physical_device_props physical_device_properties_;
 
     static bool is_extension_available(const std::vector<vk::ExtensionProperties>& properties, const char* extension);
 
@@ -47,23 +43,21 @@ private:
     uint32_t find_dedicated_transfer_family(const std::vector<vk::QueueFamilyProperties>& families);
     uint32_t find_compute_family(const std::vector<vk::QueueFamilyProperties>& families);
     uint32_t find_graphics_family(const std::vector<vk::QueueFamilyProperties>& families);
-
-    physical_device_props query_physical_device_properties() const;
 public:
-
-    vulkan_core(std::vector<const char*> instance_extensions, std::vector<const char*> device_extensions);
+    vulkan_core(vk::Instance instance, const gpu& gpu, std::vector<const char*> device_extensions);
     ~vulkan_core();
 
     vk::Instance instance() const;
     vk::Device device() const;
-    vk::PhysicalDevice physical_device() const;
+	vk::PhysicalDevice physical_device() const;
+	gpu gpu() const;
     vk::Queue graphics_queue() const;
     uint32_t graphics_queue_family() const;
     vk::CommandPool graphics_command_pool() const;
+    vk::CommandPool compute_command_pool() const;
+    vk::CommandPool transfer_command_pool() const;
     vk::Queue compute_queue() const;
     vk::Queue transfer_queue() const;
-
-    const physical_device_props& physical_device_properties() const;
 };
 
 }

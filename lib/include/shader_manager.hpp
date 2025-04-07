@@ -5,6 +5,7 @@
 
 #include <slang-com-ptr.h>
 #include <slang.h>
+#include <source_location>
 
 namespace vkengine {
 
@@ -17,18 +18,22 @@ struct shader_object {
 
 class shader_manager {
 public:
+    struct entry_point_compile_info {
+		std::string name;
+		std::vector<slang::SpecializationArg> specialization_args;
+    };
+
     shader_manager(std::reference_wrapper<vulkan_core> vulkan);
 
-    shader_object load_shader(
+    std::vector<shader_object> load_shader(
         const std::string& module_name,
-        const std::string& entry_point_name,
-        const std::array<uint32_t, 3>& workgroup_sizes,
-		const std::vector<slang::SpecializationArg> specialisation_args = {}
+        const std::vector<entry_point_compile_info>& entry_point_infos,
+        const std::array<uint32_t, 3>& workgroup_sizes
     );
 private:
     void throw_exception_with_slang_diagnostics(const std::string& message, const std::source_location& location = std::source_location::current());
 
-    void setup_slang();
+    void setup_slang_session();
     void create_subgroup_module();
     bool check_valid_workgroup_sizes(const std::array<uint32_t, 3>& workgroup_sizes);
     Slang::ComPtr<slang::IModule> create_workgroup_module(const std::array<uint32_t, 3>& workgroup_sizes);

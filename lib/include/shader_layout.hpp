@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ranges>
+
 namespace vkengine {
 
 vk::DescriptorType map_slang_binding_type_to_vk(slang::BindingType binding_type) {
@@ -45,7 +47,7 @@ public:
 			pipeline_layout_builder.descriptor_set_layouts.push_back(VK_NULL_HANDLE);
 		}
 
-		void add_automatically_introduced_uniform_buffer() {
+		void add_automatically_introduced_uniforbuffer() {
 			auto vulkan_binding_index = descriptor_binding_ranges.size();
 
 			descriptor_binding_ranges.emplace_back(
@@ -136,7 +138,7 @@ public:
 			// The automatically-introduced uniform buffer will only be present if it was needed (that is, when the element type has a non-zero size in bytes),
 			// and it will always precede any other bindings for the parameter block.
 			// https://shader-slang.org/docs/parameter-blocks/
-			if (element_type_layout->getSize() > 0) add_automatically_introduced_uniform_buffer();
+			if (element_type_layout->getSize() > 0) add_automatically_introduced_uniforbuffer();
 
 			add_descriptor_ranges(element_type_layout, shader_stage);
 			pipeline_layout_builder_.get().add_sub_object_ranges(element_type_layout, shader_stage);
@@ -211,22 +213,43 @@ public:
 	}
 };
 
-struct shader_layout {
+struct entry_point_layout {
+	std::string name;
 	vk::PipelineLayout pipeline_layout;
 	std::vector<vk::PushConstantRange> push_constant_ranges;
 };
 
+struct shader_layout {
+	std::vector<entry_point_layout> entry_point_layouts;
+};
+
 shader_layout create_pipeline_layout(slang::ProgramLayout* program_layout, std::reference_wrapper<vulkan_core> vulkan_core) {
-	pipeline_layout_builder pipeline_layout_builder(vulkan_core);
-	pipeline_layout_builder::descriptor_set_layout_builder descriptor_set_layout_builder(vulkan_core, pipeline_layout_builder);
+	pipeline_layout_builder pipeline_layout_builder_(vulkan_core);
+	pipeline_layout_builder::descriptor_set_layout_builder descriptor_set_layout_builder(vulkan_core, pipeline_layout_builder_);
+
+	auto entry_point_layouts =
+		std::views::iota(0u, program_layout->getEntryPointCount())
+		| std::views::transform([&](auto idx) {
+			auto* entry_point = program_layout->getEntryPointByIndex(idx);
+			pipeline_layout_builder pipeline_builder(vulkan_core);
+			pipeline_layout_builder::descriptor_set_layout_builder descriptor_set_layout_builder(vulkan_core, pipeline_builder);
+
+			descriptor_set_layout_builder.add_entry_point_parameters(entry_point);
+			descriptor_set_layout_builder.finish_building(pipeline_builder);
+			vk::PipelineLayout pipeline_layout = pipeline_builder.finish_building();
+			return entry_point_layout{ 
+				.name = entry_point->getName(),
+				.pipeline_layout = pipeline_layout,
+				.push_constant_ranges = pipeline_builder.push_constant_ranges
+			};
+		});
 
 	descriptor_set_layout_builder.add_entry_point_parameters(program_layout);
-	descriptor_set_layout_builder.finish_building(pipeline_layout_builder);
-	vk::PipelineLayout pipeline_layout = pipeline_layout_builder.finish_building();
+	descriptor_set_layout_builder.finish_building(pipeline_layout_builder_);
+	vk::PipelineLayout pipeline_layout = pipeline_layout_builder_.finish_building();
 
 	return shader_layout {
-		.pipeline_layout = pipeline_layout,
-		.push_constant_ranges = pipeline_layout_builder.push_constant_ranges
+		.entry_point_layouts = entry_point_layouts | std::ranges::to<std::vector>()
 	};
 }
 }

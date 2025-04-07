@@ -1,7 +1,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan_core.hpp>
-
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+#include <spdlog/spdlog.h>
+#include <detailed_exception.hpp>
 
 namespace vkengine {
 
@@ -69,43 +69,8 @@ uint32_t vulkan_core::find_graphics_family(const std::vector<vk::QueueFamilyProp
     throw detailed_exception("No graphics queue family found");
 }
 
-vulkan_core::physical_device_props vulkan_core::query_physical_device_properties() const {
-    vk::StructureChain<
-        vk::PhysicalDeviceProperties2,
-        vk::PhysicalDeviceSubgroupProperties> chain;
-
-    physical_device_.getProperties2(&chain.get<vk::PhysicalDeviceProperties2>());
-
-    return {
-        chain.get<vk::PhysicalDeviceProperties2>().properties,
-        chain.get<vk::PhysicalDeviceSubgroupProperties>()
-    };
-}
-
-vulkan_core::vulkan_core(std::vector<const char*> instance_extensions, std::vector<const char*> device_extensions) {
-    VULKAN_HPP_DEFAULT_DISPATCHER.init();
-
-    vk::ApplicationInfo app_info("Dear ImGui Vulkan App", 1, "No Engine", 1, VK_API_VERSION_1_4);
-
-    auto available_extensions = vk::enumerateInstanceExtensionProperties(nullptr);
-    if (is_extension_available(available_extensions, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
-        instance_extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-    std::vector<const char*> layers;
-
-#ifdef APP_USE_VULKAN_DEBUG_REPORT
-    layers.emplace_back("VK_LAYER_KHRONOS_validation");
-    instance_extensions.push_back("VK_EXT_debug_report");
-#endif
-
-    auto instance_ci = vk::InstanceCreateInfo()
-        .setPApplicationInfo(&app_info)
-        .setPEnabledExtensionNames(instance_extensions)
-        .setPEnabledLayerNames(layers);
-
-    instance_ = vk::createInstance(instance_ci);
-    VULKAN_HPP_DEFAULT_DISPATCHER.init(instance_);
-
+vulkan_core::vulkan_core(vk::Instance instance, const vkengine::gpu& gpu, std::vector<const char*> device_extensions)
+    : instance_(instance), gpu_(gpu) {
 #ifdef APP_USE_VULKAN_DEBUG_REPORT
     debug_report_ = instance_.createDebugReportCallbackEXT(
         vk::DebugReportCallbackCreateInfoEXT()
@@ -114,30 +79,9 @@ vulkan_core::vulkan_core(std::vector<const char*> instance_extensions, std::vect
     );
 #endif
 
-    auto physical_devices = instance_.enumeratePhysicalDevices();
-    if (physical_devices.empty())
-        throw detailed_exception("No GPUs with Vulkan support found.");
-
-    // Prefer discrete GPUs
-    for (const auto& pd : physical_devices) {
-        vk::PhysicalDeviceProperties props = pd.getProperties();
-        if (props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
-            physical_device_ = pd;
-            break;
-        }
-    }
-
-    // Else pick the first
-    if (!physical_device_)
-        physical_device_ = physical_devices[0];
-
-    physical_device_properties_ = query_physical_device_properties();
-
-    auto queue_families = physical_device_.getQueueFamilyProperties();
-
-    transfer_queue_family_ = find_dedicated_transfer_family(queue_families);
-    compute_queue_family_ = find_compute_family(queue_families);
-    graphics_queue_family_ = find_graphics_family(queue_families);
+    transfer_queue_family_ = find_dedicated_transfer_family(gpu_.queue_family_properties);
+    compute_queue_family_ = find_compute_family(gpu_.queue_family_properties);
+    graphics_queue_family_ = find_graphics_family(gpu_.queue_family_properties);
 
     std::unordered_map<uint32_t, uint32_t> queue_counts;
     queue_counts[transfer_queue_family_]++;
@@ -158,32 +102,24 @@ vulkan_core::vulkan_core(std::vector<const char*> instance_extensions, std::vect
         );
     }
 
-    auto shader_object_features = vk::PhysicalDeviceShaderObjectFeaturesEXT()
-        .setShaderObject(true);
+    auto device_create_info_chain = vk::StructureChain
+        (
+            vk::DeviceCreateInfo()
+                .setQueueCreateInfos(queue_create_infos)
+                .setPEnabledExtensionNames(device_extensions),
+            vk::PhysicalDeviceTimelineSemaphoreFeatures()
+                .setTimelineSemaphore(true),
+            vk::PhysicalDeviceDynamicRenderingFeatures()
+                .setDynamicRendering(true),
+            vk::PhysicalDeviceShaderObjectFeaturesEXT()
+                .setShaderObject(true),
+            vk::PhysicalDeviceBufferDeviceAddressFeatures()
+                .setBufferDeviceAddress(true),
+            vk::PhysicalDeviceSynchronization2Features()
+                .setSynchronization2(true)
+        );
 
-    auto dynamic_rendering_features = vk::PhysicalDeviceDynamicRenderingFeatures()
-        .setDynamicRendering(true);
-
-    auto timeline_features = vk::PhysicalDeviceTimelineSemaphoreFeatures()
-        .setTimelineSemaphore(true);
-
-    auto buffer_device_address_features = vk::PhysicalDeviceBufferDeviceAddressFeatures()
-        .setBufferDeviceAddress(true);
-
-    auto device_info = vk::DeviceCreateInfo()
-        .setQueueCreateInfos(queue_create_infos)
-        .setPEnabledExtensionNames(device_extensions)
-        .setPNext(&dynamic_rendering_features);
-
-    auto device_create_info_chain = vk::StructureChain<
-        vk::DeviceCreateInfo,
-        vk::PhysicalDeviceTimelineSemaphoreFeatures,
-        vk::PhysicalDeviceDynamicRenderingFeatures,
-        vk::PhysicalDeviceShaderObjectFeaturesEXT,
-        vk::PhysicalDeviceBufferDeviceAddressFeatures>
-        (device_info, timeline_features, dynamic_rendering_features, shader_object_features, buffer_device_address_features);
-
-    device_ = physical_device_.createDevice(device_create_info_chain.get<vk::DeviceCreateInfo>());
+    device_ = gpu_.physical_device.createDevice(device_create_info_chain.get<vk::DeviceCreateInfo>());
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device_);
 
     std::unordered_map<uint32_t, uint32_t> family_indices;
@@ -226,11 +162,11 @@ vk::Device vulkan_core::device() const {
 }
 
 vk::PhysicalDevice vulkan_core::physical_device() const {
-    return physical_device_;
+	return gpu_.physical_device;
 }
 
-vk::Queue vulkan_core::graphics_queue() const {
-    return graphics_queue_;
+gpu vulkan_core::gpu() const {
+	return gpu_;
 }
 
 uint32_t vulkan_core::graphics_queue_family() const {
@@ -241,16 +177,24 @@ vk::CommandPool vulkan_core::graphics_command_pool() const {
     return graphics_pool_;
 }
 
+vk::CommandPool vulkan_core::transfer_command_pool() const {
+    return transfer_pool_;
+}
+
+vk::CommandPool vulkan_core::compute_command_pool() const {
+	return compute_pool_;
+}
+
+vk::Queue vulkan_core::graphics_queue() const {
+    return graphics_queue_;
+}
+
 vk::Queue vulkan_core::compute_queue() const {
     return compute_queue_;
 }
 
 vk::Queue vulkan_core::transfer_queue() const {
     return transfer_queue_;
-}
-
-const vulkan_core::physical_device_props& vulkan_core::physical_device_properties() const {
-    return physical_device_properties_;
 }
 
 }

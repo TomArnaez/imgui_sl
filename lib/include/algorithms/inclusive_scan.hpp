@@ -8,10 +8,11 @@
 
 namespace vkengine {
 
+template<access_policy policy>
 void inclusive_scan(
-	typed_buffer<uint16_t>& input,
-	typed_buffer<uint16_t>& output,
-	typed_buffer<uint16_t>& group_sums,
+	typed_buffer<uint32_t, policy>& input,
+	typed_buffer<uint32_t, policy>& output,
+	typed_buffer<uint32_t, policy>& group_sums,
 	shader_manager& shader_manager,
 	vk::CommandBuffer cmd_buffer
 ) {
@@ -25,31 +26,31 @@ void inclusive_scan(
 		throw detailed_exception("Group sums buffer is too small");
 
 	auto inclusive_scan_shader = shader_manager.load_shader(
-		std::string(VKENGINE_SHADER_DIR) + "\\inclusive_scan.slang",
-		"workgroup_inclusive_scan",
-		{ 128, 1, 1 }
-	);
+		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
+		{ .name = "workgroup_inclusive_scan" },
+		dispatch_counts
+	)[0];
 
 	auto subgroup_exclusive_scan_shader = shader_manager.load_shader(
-		std::string(VKENGINE_SHADER_DIR) = "\\inclusive_scan.slang",
-		"subgroup_exclusive_scan",
+		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
+		{ .name = "subgroup_exclusive_scan" },
 		{ 1, 1, 1 }
-	);
+	)[0];
 
 	auto propogate_group_sums_shader = shader_manager.load_shader(
-		std::string(VKENGINE_SHADER_DIR) = "\\inclusive_scan.slang",
-		"propogate_group_sums",
+		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
+		{ .name = "propogate_group_sums" },
 		{ group_count, 1, 1 }
-	);
+	)[0];
 
-	device_span<uint16_t> input_span = input.device_span();
-	device_span<uint16_t> output_span = output.device_span();
-	device_span<uint16_t> group_sums_span = group_sums.device_span();
+	device_span<uint32_t> input_span = input.device_span();
+	device_span<uint32_t> output_span = output.device_span();
+	device_span<uint32_t> group_sums_span = group_sums.device_span();
 
 	struct inclusive_span_push_constants {
-		device_span<uint16_t> input;
-		device_span<uint16_t> output;
-		device_span<uint16_t> group_sums;
+		device_span<uint32_t> input;
+		device_span<uint32_t> output;
+		device_span<uint32_t> group_sums;
 	};
 
 	inclusive_span_push_constants scan_push_constants = {
@@ -57,13 +58,6 @@ void inclusive_scan(
 		.output = output_span,
 		.group_sums = group_sums_span
 	};
-
-	auto inclusive_scan_barrier = vk::BufferMemoryBarrier2()
-		.setSrcStageMask(vk::PipelineStageFlagBits2::eComputeShader)
-		.setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)
-		.setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader)
-		.setDstAccessMask(vk::AccessFlagBits2::eShaderRead)
-		.setBuffer(group_sums.vk_buffer_handle());
 
 	dispatch_shader(
 		cmd_buffer,
@@ -73,9 +67,18 @@ void inclusive_scan(
 		scan_push_constants
 	);
 
+	auto inclusive_scan_barrier = vk::BufferMemoryBarrier2()
+		.setSrcStageMask(vk::PipelineStageFlagBits2::eComputeShader)
+		.setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)
+		.setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader)
+		.setDstAccessMask(vk::AccessFlagBits2::eShaderRead)
+		.setBuffer(group_sums.vk_handle())
+		.setSize(VK_WHOLE_SIZE);
+
+
 	cmd_buffer.pipelineBarrier2(vk::DependencyInfo().setBufferMemoryBarriers(inclusive_scan_barrier));
 
-	dispatch_shader<device_span<uint16_t>>(
+	dispatch_shader<device_span<uint32_t>>(
 		cmd_buffer,
 		subgroup_exclusive_scan_shader,
 		{1, 1, 1},
@@ -90,7 +93,7 @@ void inclusive_scan(
 				.setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)
 				.setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader)
 				.setDstAccessMask(vk::AccessFlagBits2::eShaderWrite | vk::AccessFlagBits2::eShaderWrite)
-				.setBuffer(group_sums.vk_buffer_handle())
+				.setBuffer(group_sums.vk_handle())
 				.setSize(VK_WHOLE_SIZE),
 
 			vk::BufferMemoryBarrier2()
@@ -98,7 +101,7 @@ void inclusive_scan(
 				.setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)
 				.setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader)
 				.setDstAccessMask(vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite)
-				.setBuffer(output.vk_buffer_handle())
+				.setBuffer(output.vk_handle())
 				.setSize(VK_WHOLE_SIZE)
 		};
 
