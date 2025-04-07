@@ -28,44 +28,96 @@ void shader_manager::throw_exception_with_slang_diagnostics(
     throw detailed_exception(location, full_message);
 }
 
+Slang::ComPtr<slang::IModule> shader_manager::create_shader_module_from_source_string(
+    const std::string& source_string,
+    const std::string& module_name
+) {
+	spdlog::info("Creating shader module from source string: {}", module_name);
+	spdlog::debug("Source string: {}", source_string);
+
+    std::string module_path = fmt::format("{}.slang", module_name);
+
+	Slang::ComPtr<slang::IModule> module(
+        session->loadModuleFromSourceString(
+		module_name.c_str(),
+        module_path.c_str(),
+		source_string.c_str(),
+		diagnostics.writeRef())
+    );
+
+	if (!module)
+		throw detailed_exception("Failed to create shader module from source string");
+
+	return module;
+}
+
 std::vector<shader_object> shader_manager::load_shader(
     const std::string& module_name,
     const std::vector<entry_point_compile_info>& entry_point_infos,
-    const std::array<uint32_t, 3>& workgroup_sizes
+    const std::vector<Slang::ComPtr<slang::IModule>> modules
 ) {
-    spdlog::info("Loading shader: {}, workgroups: {}", module_name, workgroup_sizes);
+    spdlog::info("Loading shader: {}", module_name);
 
     Slang::ComPtr<slang::IModule> module(session->loadModule(module_name.c_str(), diagnostics.writeRef()));
 
     if (!module)
         throw_exception_with_slang_diagnostics("Failed to create module");
 
+	auto module_layout = module->getLayout();
+
     auto entry_points = entry_point_infos
         | std::views::transform(
             [&](const entry_point_compile_info& entry_point_info) {
-                Slang::ComPtr<slang::IEntryPoint> entry_point;
-                module->findEntryPointByName(entry_point_info.name.c_str(), entry_point.writeRef());
+                Slang::ComPtr<slang::IComponentType> entry_point;
+                module->findEntryPointByName(entry_point_info.name.c_str(), reinterpret_cast<slang::IEntryPoint**>(entry_point.writeRef()));
 
                 if (!entry_point)
                     throw_exception_with_slang_diagnostics("Failed to find entry point: " + entry_point_info.name);
 
+                if (!entry_point_info.specialisation_type_names.empty()) {
+                    Slang::ComPtr<slang::IComponentType> specialised_entry_point;
+
+                    spdlog::debug("Specialising args for entry point {}", entry_point_info.name);
+
+                    auto slang_specialisation_args = std::views::transform(
+                            entry_point_info.specialisation_type_names,
+                            [&](const std::string& type_name) {
+                                return slang::SpecializationArg::fromType(module_layout->findTypeByName(type_name.c_str()));
+                            }) | std::ranges::to<std::vector>();
+
+					entry_point->specialize(
+						slang_specialisation_args.data(),
+						slang_specialisation_args.size(),
+						specialised_entry_point.writeRef(),
+						diagnostics.writeRef()
+					);
+
+					if (!specialised_entry_point)
+						throw_exception_with_slang_diagnostics("Failed to specialise entry point: " + entry_point_info.name);
+
+					entry_point = specialised_entry_point.get();
+                }
                 return entry_point;
                 })
         | std::ranges::to<std::vector>();
 
-
-    Slang::ComPtr<slang::IModule> workgroup_module = create_workgroup_module(workgroup_sizes);
-
-    std::vector<slang::IComponentType*> components = { module, subgroup_module, workgroup_module };
+    std::vector<slang::IComponentType*> components = { module, subgroup_module };
 	components.insert(components.end(), entry_points.begin(), entry_points.end());
+	components.insert(components.end(), modules.begin(), modules.end());
 
-    slang::IComponentType* program = nullptr;
-    session->createCompositeComponentType(components.data(), components.size(), &program, diagnostics.writeRef());
+    Slang::ComPtr<slang::IComponentType> program = nullptr;
+    session->createCompositeComponentType(components.data(), components.size(), program.writeRef(), diagnostics.writeRef());
 
     if (!program)
         throw_exception_with_slang_diagnostics("Failed to create slang program");
 
-    slang::ProgramLayout* layout = program->getLayout();
+    Slang::ComPtr<slang::IComponentType> linked_program;
+	program->link(linked_program.writeRef(), diagnostics.writeRef());
+
+	if (!linked_program)
+		throw_exception_with_slang_diagnostics("Failed to link program");
+
+    slang::ProgramLayout* layout = linked_program->getLayout();
     slang::EntryPointReflection* entry_point_reflection = layout->getEntryPointByIndex(0);
 
     vk::ShaderStageFlagBits stage;
@@ -79,12 +131,12 @@ std::vector<shader_object> shader_manager::load_shader(
     }
 
     Slang::ComPtr<slang::IBlob> spirv_code;
-    program->getTargetCode(0, spirv_code.writeRef(), diagnostics.writeRef());
+    linked_program->getTargetCode(0, spirv_code.writeRef(), diagnostics.writeRef());
 
     if (!spirv_code)
         throw_exception_with_slang_diagnostics("Failed to create spirv code");
 
-	slang::ProgramLayout* program_layout = program->getLayout();
+	slang::ProgramLayout* program_layout = linked_program->getLayout();
 
     shader_layout shader_layout = create_pipeline_layout(program_layout, vulkan.get());
 
@@ -118,7 +170,18 @@ std::vector<shader_object> shader_manager::load_shader(
 
     std::vector<shader_object> shader_objects;
 
-	for (auto& entry_point_layout : shader_layout.entry_point_layouts) {
+	for (auto [index, entry_point_layout] : std::views::enumerate(shader_layout.entry_point_layouts)) {
+        Slang::ComPtr<slang::IBlob> entry_point_code;
+        linked_program->getEntryPointCode(
+            index,
+            0,
+            entry_point_code.writeRef(),
+            diagnostics.writeRef()
+        );
+
+		if (!entry_point_code)
+			throw_exception_with_slang_diagnostics("Failed to create entry point code");
+
         vk::ResultValue<vk::ShaderEXT> shader_obj = vulkan.get().device().createShaderEXT(
             vk::ShaderCreateInfoEXT()
             .setStage(stage)
@@ -132,7 +195,7 @@ std::vector<shader_object> shader_manager::load_shader(
         if (shader_obj.result != vk::Result::eSuccess)
             throw detailed_exception("Failed to create shader object");
 
-        shader_objects.emplace_back(shader_object {
+        shader_objects.emplace_back(shader_object{
             .pipeline_layout = entry_point_layout.pipeline_layout,
             .push_constant_range = entry_point_layout.push_constant_ranges[0],
             .shader_ext = shader_obj.value,
@@ -148,7 +211,7 @@ void shader_manager::setup_slang_session() {
 
     target_desc = {
         .format = SLANG_SPIRV,
-        .profile = global_session->findProfile("spirv_1_5"),
+        .profile = global_session->findProfile("spirv_1_6"),
         .forceGLSLScalarBufferLayout = true
     };
 
@@ -156,14 +219,23 @@ void shader_manager::setup_slang_session() {
         {
             .name = slang::CompilerOptionName::VulkanUseEntryPointName,
             .value = {.kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1}
+        },
+        {
+            .name = slang::CompilerOptionName::GLSLForceScalarLayout,
+            .value = {.kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1}
         }
     };
+
+    std::string shader_dir(VKENGINE_SHADER_DIR);
+	std::array<const char*, 1> search_paths = { shader_dir.c_str() };
 
     session_desc = {
         .targets = &target_desc,
         .targetCount = 1,
+		.searchPaths = search_paths.data(),
+        .searchPathCount = search_paths.size(),
         .compilerOptionEntries = compiler_option_entries.data(),
-        .compilerOptionEntryCount = static_cast<uint32_t>(compiler_option_entries.size())
+        .compilerOptionEntryCount = static_cast<uint32_t>(compiler_option_entries.size()),
     };
 
     global_session->createSession(session_desc, session.writeRef());
@@ -176,32 +248,6 @@ void shader_manager::create_subgroup_module() {
     if (!subgroup_module)
         throw std::runtime_error("Failed to create subgroup module");
 }
-
-Slang::ComPtr<slang::IModule> shader_manager::create_workgroup_module(const std::array<uint32_t, 3>& workgroup_sizes) {
-    std::string workgroup_module_src = std::format(
-        "export static const uint WORKGROUP_SIZE_X = {};"
-        "export static const uint WORKGROUP_SIZE_Y = {};"
-        "export static const uint WORKGROUP_SIZE_Z = {};",
-        workgroup_sizes[0],
-        workgroup_sizes[1],
-        workgroup_sizes[2]
-    );
-
-    Slang::ComPtr<slang::IModule> workgroup_module(session->loadModuleFromSourceString("workgroup_sizes", "workgroup_sizes.slang", workgroup_module_src.c_str()));
-
-    if (!workgroup_module)
-        throw detailed_exception("Failed to load workgroup module");
-
-    return workgroup_module;
-}
-
-bool shader_manager::check_valid_workgroup_sizes(const std::array<uint32_t, 3>& workgroup_sizes) {
-    auto max_workgroup_sizes = vulkan.get().gpu().properties.properties.limits.maxComputeWorkGroupSize;
-    if (workgroup_sizes[0] > max_workgroup_sizes[0] || workgroup_sizes[1] > max_workgroup_sizes[1] || workgroup_sizes[2] > max_workgroup_sizes[2])
-        return false;
-    return true;
-}
-
 
 void shader_manager::log_scope(slang::VariableLayoutReflection* scope_variable_layout) {
     auto type_layout = scope_variable_layout->getTypeLayout();

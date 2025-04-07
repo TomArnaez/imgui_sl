@@ -1,12 +1,13 @@
 #pragma once
 
-#include <allocator.hpp>
 #include <algorithms/dispatch.hpp>
 #include <detailed_exception.hpp>
 #include <shader_manager.hpp>
 #include <typed_buffer.hpp>
 
 namespace vkengine {
+
+constexpr uint32_t INCLUSIVE_SCAN_WORKGROUP_SIZE = 128;
 
 template<access_policy policy>
 void inclusive_scan(
@@ -25,27 +26,29 @@ void inclusive_scan(
 	if (group_sums.size() < group_count)
 		throw detailed_exception("Group sums buffer is too small");
 
-	auto inclusive_scan_shader = shader_manager.load_shader(
-		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
-		{ .name = "workgroup_inclusive_scan" },
-		dispatch_counts
-	)[0];
+	auto workgroup_module = shader_manager.create_shader_module_from_source_string(
+		fmt::format(
+			"export static const uint INCLUSIVE_SCAN_WORKGROUP_SIZE = {};",
+			INCLUSIVE_SCAN_WORKGROUP_SIZE
+		),
+		"workgroup_module"
+	);
 
-	auto subgroup_exclusive_scan_shader = shader_manager.load_shader(
+	auto shader_objects = shader_manager.load_shader(
 		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
-		{ .name = "subgroup_exclusive_scan" },
-		{ 1, 1, 1 }
-	)[0];
-
-	auto propogate_group_sums_shader = shader_manager.load_shader(
-		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
-		{ .name = "propogate_group_sums" },
-		{ group_count, 1, 1 }
-	)[0];
-
-	device_span<uint32_t> input_span = input.device_span();
-	device_span<uint32_t> output_span = output.device_span();
-	device_span<uint32_t> group_sums_span = group_sums.device_span();
+		{
+			shader_manager::entry_point_compile_info {
+				.name = "workgroup_inclusive_scan",
+			},
+			shader_manager::entry_point_compile_info {
+				.name = "subgroup_exclusive_scan",
+			},
+			shader_manager::entry_point_compile_info {
+				.name = "propogate_group_sums",
+			}
+		},
+		{ workgroup_module }
+	);
 
 	struct inclusive_span_push_constants {
 		device_span<uint32_t> input;
@@ -54,14 +57,14 @@ void inclusive_scan(
 	};
 
 	inclusive_span_push_constants scan_push_constants = {
-		.input = input_span,
-		.output = output_span,
-		.group_sums = group_sums_span
+		.input = input.device_span(),
+		.output = output.device_span(),
+		.group_sums = group_sums.device_span()
 	};
 
 	dispatch_shader(
 		cmd_buffer,
-		inclusive_scan_shader,
+		shader_objects[0],
 		dispatch_counts,
 		vk::ShaderStageFlagBits::eCompute,
 		scan_push_constants
@@ -80,10 +83,10 @@ void inclusive_scan(
 
 	dispatch_shader<device_span<uint32_t>>(
 		cmd_buffer,
-		subgroup_exclusive_scan_shader,
+		shader_objects[1],
 		{1, 1, 1},
 		vk::ShaderStageFlagBits::eCompute,
-		group_sums_span
+		group_sums.device_span()
 	);
 
 	{
@@ -110,7 +113,7 @@ void inclusive_scan(
 
 	dispatch_shader(
 		cmd_buffer,
-		propogate_group_sums_shader,
+		shader_objects[2],
 		{group_count, 1, 1},
 		vk::ShaderStageFlagBits::eCompute,
 		scan_push_constants

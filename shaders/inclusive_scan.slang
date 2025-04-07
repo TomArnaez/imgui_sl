@@ -1,33 +1,19 @@
 extern const static uint SUBGROUP_SIZE;
-extern const static uint WORKGROUP_SIZE_X;
-extern const static uint WORKGROUP_SIZE_Y;
-extern const static uint WORKGROUP_SIZE_Z;
+extern const static uint INCLUSIVE_SCAN_WORKGROUP_SIZE;
 
-groupshared uint shared_data[WORKGROUP_SIZE_X / SUBGROUP_SIZE];
+import span;
 
-struct span<T> {
-    private T* data_;
-    private uint size_;
-
-    __subscript(uint x) -> T {
-        get { return data_[x]; }
-        set { data_[x] = newValue; }
-    }
-
-    property uint size {
-        get { return size_; }
-    }
-};
+groupshared uint shared_data[INCLUSIVE_SCAN_WORKGROUP_SIZE / SUBGROUP_SIZE];
 
 [shader("compute")]
-[numthreads(WORKGROUP_SIZE_X, 1, 1)]
+[numthreads(INCLUSIVE_SCAN_WORKGROUP_SIZE, 1, 1)]
 void workgroup_inclusive_scan(
     uniform span<uint> input_span,
     uniform span<uint> output,
     uniform span<uint> group_sums,
-                              uint3 group_id: SV_GroupID,
+    uint3 group_id: SV_GroupID,
     uint3 global_thread_id: SV_DispatchThreadID,
-                              uint group_thread_id: SV_GroupThreadID
+    uint group_thread_id: SV_GroupThreadID
 ) {
     uint global_thread_idx = global_thread_id.x;
 
@@ -50,12 +36,12 @@ void workgroup_inclusive_scan(
 
     output[global_thread_idx] = x;
 
-    if (group_thread_id.x == WORKGROUP_SIZE_X - 1)
+    if (group_thread_id.x == INCLUSIVE_SCAN_WORKGROUP_SIZE - 1)
         group_sums[group_id.x] = x;
 }
 
 [shader("compute")]
-[numthreads(WORKGROUP_SIZE_X, 1, 1)]
+[numthreads(SUBGROUP_SIZE, 1, 1)]
 void subgroup_exclusive_scan(
     uniform span<uint> group_sums,
     uint3 group_id: SV_GroupID,
@@ -69,7 +55,7 @@ void subgroup_exclusive_scan(
 }
 
 [shader("compute")]
-[numthreads(WORKGROUP_SIZE_X, 1, 1)]
+[numthreads(INCLUSIVE_SCAN_WORKGROUP_SIZE, 1, 1)]
 void propogate_group_sums(
     uniform span<uint> input_span,
     uniform span<uint> output,

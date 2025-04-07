@@ -107,6 +107,8 @@ vulkan_core::vulkan_core(vk::Instance instance, const vkengine::gpu& gpu, std::v
             vk::DeviceCreateInfo()
                 .setQueueCreateInfos(queue_create_infos)
                 .setPEnabledExtensionNames(device_extensions),
+            vk::PhysicalDeviceFeatures2()
+                .setFeatures(vk::PhysicalDeviceFeatures().setShaderInt16(true)),
             vk::PhysicalDeviceTimelineSemaphoreFeatures()
                 .setTimelineSemaphore(true),
             vk::PhysicalDeviceDynamicRenderingFeatures()
@@ -116,7 +118,9 @@ vulkan_core::vulkan_core(vk::Instance instance, const vkengine::gpu& gpu, std::v
             vk::PhysicalDeviceBufferDeviceAddressFeatures()
                 .setBufferDeviceAddress(true),
             vk::PhysicalDeviceSynchronization2Features()
-                .setSynchronization2(true)
+                .setSynchronization2(true),
+            vk::PhysicalDevice16BitStorageFeatures()
+                .setStoragePushConstant16(true)
         );
 
     device_ = gpu_.physical_device.createDevice(device_create_info_chain.get<vk::DeviceCreateInfo>());

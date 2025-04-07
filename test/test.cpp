@@ -3,6 +3,7 @@
 #include <allocator.hpp>
 #include <algorithms/inclusive_scan.hpp>
 #include <algorithms/histogram.hpp>
+#include <algorithms/normalise.hpp>
 #include <queue_family.hpp>
 #include <typed_buffer.hpp>
 #include <gpu.hpp>
@@ -20,6 +21,59 @@ bool is_extension_available(const std::vector<vk::ExtensionProperties>& properti
     return false;
 }
 
+}
+
+void test_normalisation(vkengine::vulkan_core& core, vkengine::allocator& allocator, vkengine::shader_manager& shader_manager) {
+    uint32_t element_count = 1024;
+
+    vkengine::host_visible_buffer<uint32_t> input(
+        allocator,
+        core,
+        element_count
+    );
+
+    vkengine::host_visible_buffer<uint16_t> output(
+        allocator,
+        core,
+        element_count
+    );
+
+    auto&& range = input.data();
+    std::ranges::copy(std::ranges::iota_view(0u, range.size()), range.begin());
+
+    vk::CommandBuffer cmd_buffer = core.device().allocateCommandBuffers(
+        vk::CommandBufferAllocateInfo()
+        .setCommandPool(core.compute_command_pool())
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandBufferCount(1)
+    ).front();
+
+    cmd_buffer.begin(vk::CommandBufferBeginInfo()
+        .setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+    );
+
+    normalise<uint32_t, uint16_t>(
+        input,
+        output,
+        0,
+        1024,
+        0,
+        255,
+        shader_manager,
+        cmd_buffer
+    );
+
+    cmd_buffer.end();
+
+    core.compute_queue().submit(
+        vk::SubmitInfo()
+        .setCommandBuffers(cmd_buffer)
+    );
+
+    core.device().waitIdle();
+
+    for (uint32_t data : output.data())
+        std::cout << data << " ";
 }
 
 int main() {
@@ -59,67 +113,69 @@ int main() {
 	vkengine::allocator allocator(core);
     vkengine::shader_manager shader_manager(core);
 
-    VmaAllocationCreateInfo host_alloc_info = {};
-    host_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-    host_alloc_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-        VMA_ALLOCATION_CREATE_MAPPED_BIT;
+ //   VmaAllocationCreateInfo host_alloc_info = {};
+ //   host_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+ //   host_alloc_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+ //       VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    uint32_t element_count = 1024;
+ //   uint32_t element_count = 1024;
 
-    vkengine::host_visible_buffer<uint32_t> buffer(
-		allocator,
-		core,
-		element_count
-	);
+ //   vkengine::host_visible_buffer<uint32_t> buffer(
+	//	allocator,
+	//	core,
+	//	element_count
+	//);
 
-    vkengine::host_visible_buffer <uint32_t> group_sums(
-        allocator,
-        core,
-        element_count
-    );
+ //   vkengine::host_visible_buffer <uint32_t> group_sums(
+ //       allocator,
+ //       core,
+ //       element_count
+ //   );
 
-    vkengine::host_visible_buffer<uint32_t> output(
-        allocator,
-        core,
-        element_count
-    );
+ //   vkengine::host_visible_buffer<uint32_t> output(
+ //       allocator,
+ //       core,
+ //       element_count
+ //   );
 
-    auto&& range = buffer.data();
-    std::ranges::iota_view source(0u, range.size());
-    std::ranges::copy(source, range.begin());
+ //   auto&& range = buffer.data();
+ //   std::ranges::iota_view source(0u, range.size());
+ //   std::ranges::copy(source, range.begin());
 
-	vk::CommandBuffer cmd_buffer = core.device().allocateCommandBuffers(
-		vk::CommandBufferAllocateInfo()
-		.setCommandPool(core.compute_command_pool())
-		.setLevel(vk::CommandBufferLevel::ePrimary)
-		.setCommandBufferCount(1)
-	).front();
+	//vk::CommandBuffer cmd_buffer = core.device().allocateCommandBuffers(
+	//	vk::CommandBufferAllocateInfo()
+	//	.setCommandPool(core.compute_command_pool())
+	//	.setLevel(vk::CommandBufferLevel::ePrimary)
+	//	.setCommandBufferCount(1)
+	//).front();
 
-	cmd_buffer.begin(vk::CommandBufferBeginInfo()
-		.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-	);
+	//cmd_buffer.begin(vk::CommandBufferBeginInfo()
+	//	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+	//);
 
-	inclusive_scan(
-		buffer,
-		output,
-		group_sums,
-		shader_manager,
-		cmd_buffer
-	);
+	//inclusive_scan(
+	//	buffer,
+	//	output,
+	//	group_sums,
+	//	shader_manager,
+	//	cmd_buffer
+	//);
 
-    cmd_buffer.end();
+ //   cmd_buffer.end();
 
-	core.compute_queue().submit(
-		vk::SubmitInfo()
-		.setCommandBuffers(cmd_buffer)
-	);
+	//core.compute_queue().submit(
+	//	vk::SubmitInfo()
+	//	.setCommandBuffers(cmd_buffer)
+	//);
 
-	core.device().waitIdle();
+	//core.device().waitIdle();
 
-	for (uint32_t data : output.data())
-		std::cout << data << " ";
+	//for (uint32_t data : output.data())
+	//	std::cout << data << " ";
 
-    buffer.destroy();
-    group_sums.destroy();
-	output.destroy();
+ //   buffer.destroy();
+ //   group_sums.destroy();
+	//output.destroy();
+
+	test_normalisation(core, allocator, shader_manager);
 }

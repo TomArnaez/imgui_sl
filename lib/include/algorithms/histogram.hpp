@@ -6,6 +6,8 @@
 
 namespace vkengine {
 
+constexpr uint32_t HISTOGRAM_WORKGROUP_SIZE = 128;
+
 void calculate_histogram(
 	typed_buffer<uint16_t>& input,
 	typed_buffer<uint32_t>& histogram,
