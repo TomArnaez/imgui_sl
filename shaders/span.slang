@@ -14,22 +14,26 @@ public struct span<T> {
     }
 };
 
-public struct mdspan<T, let Dims : uint> {
+public struct mdspan<T, let dims : uint> {
     private T *data_;
-    private uint[Dims] extents_;
+    private uint[dims] extents_;
 
-    private uint convert_index_to_1d(uint[Dims] indices) {
+    private uint convert_index_to_1d(uint[dims] indices) {
         uint index = 0;
         uint multiplier = 1;
-        for (uint i = Dims - 1; i != 0; --i) {
+        for (uint i = dims - 1; i != 0; --i) {
             index += indices[i] * multiplier;
             multiplier *= extents_[i];
         }
         return index + indices[0];
     }
 
-    public __subscript(uint[Dims] indices) -> T {
+    public __subscript(uint[dims] indices) -> T {
         get { return data_[convert_index_to_1d(indices)]; }
         set { data_[convert_index_to_1d(indices)] = newValue; }
+    }
+
+    public property uint[dims] extents {
+        get { return extents_; }
     }
 };
