@@ -23,27 +23,36 @@ bool is_extension_available(const std::vector<vk::ExtensionProperties>& properti
 
 }
 
-void test_normalisation(vkengine::vulkan_core& core, vkengine::allocator& allocator, vkengine::shader_manager& shader_manager) {
+struct vk_state {
+    vk_state(vk::Instance instance, vkengine::gpu gpu, std::vector<const char*> device_extensions)
+        : core(instance, gpu, device_extensions), allocator(core), shader_manager(core) { }
+
+    vkengine::vulkan_core core;
+    vkengine::allocator allocator;
+    vkengine::shader_manager shader_manager;
+};
+
+void test_normalisation(vk_state& state) {
     uint32_t element_count = 1024;
 
     vkengine::host_visible_buffer<uint32_t> input(
-        allocator,
-        core,
+        state.allocator,
+        state.core,
         element_count
     );
 
     vkengine::host_visible_buffer<uint16_t> output(
-        allocator,
-        core,
+        state.allocator,
+        state.core,
         element_count
     );
 
     auto&& range = input.data();
     std::ranges::copy(std::ranges::iota_view(0u, range.size()), range.begin());
 
-    vk::CommandBuffer cmd_buffer = core.device().allocateCommandBuffers(
+    vk::CommandBuffer cmd_buffer = state.core.device().allocateCommandBuffers(
         vk::CommandBufferAllocateInfo()
-        .setCommandPool(core.compute_command_pool())
+        .setCommandPool(state.core.compute_command_pool())
         .setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandBufferCount(1)
     ).front();
@@ -59,21 +68,85 @@ void test_normalisation(vkengine::vulkan_core& core, vkengine::allocator& alloca
         1024,
         0,
         255,
-        shader_manager,
+        state.shader_manager,
         cmd_buffer
     );
 
     cmd_buffer.end();
 
-    core.compute_queue().submit(
+    state.core.compute_queue().submit(
         vk::SubmitInfo()
         .setCommandBuffers(cmd_buffer)
     );
 
-    core.device().waitIdle();
+    state.core.device().waitIdle();
 
     for (uint32_t data : output.data())
         std::cout << data << " ";
+
+    input.destroy();
+    output.destroy();
+}
+
+void test_inclusive_scan(vk_state& state) {
+    uint32_t element_count = 1024;
+
+    vkengine::host_visible_buffer<uint32_t> buffer(
+   	    state.allocator,
+        state.core,
+   	    element_count
+   );
+
+   vkengine::host_visible_buffer <uint32_t> group_sums(
+       state.allocator,
+       state.core,
+       element_count
+   );
+
+   vkengine::host_visible_buffer<uint32_t> output(
+       state.allocator,
+       state.core,
+       element_count
+   );
+
+    auto&& range = buffer.data();
+   std::ranges::iota_view source(0u, range.size());
+   std::ranges::copy(source, range.begin());
+
+   vk::CommandBuffer cmd_buffer = state.core.device().allocateCommandBuffers(
+   	vk::CommandBufferAllocateInfo()
+   	.setCommandPool(state.core.compute_command_pool())
+   	.setLevel(vk::CommandBufferLevel::ePrimary)
+   	.setCommandBufferCount(1)
+   ).front();
+
+   cmd_buffer.begin(vk::CommandBufferBeginInfo()
+   	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+   );
+
+   inclusive_scan(
+   	buffer,
+   	output,
+   	group_sums,
+   	state.shader_manager,
+   	cmd_buffer
+   );
+
+   cmd_buffer.end();
+
+   state.core.compute_queue().submit(
+       vk::SubmitInfo()
+   	    .setCommandBuffers(cmd_buffer)
+   );
+
+   state.core.device().waitIdle();
+
+   for (uint32_t data : output.data())
+       std::cout << data << " ";
+
+   buffer.destroy();
+   group_sums.destroy();
+   output.destroy();
 }
 
 int main() {
@@ -109,73 +182,7 @@ int main() {
 		std::cout << "Subgroup size: " << gpu.subgroup_properties.subgroupSize << std::endl;
     }
 
-    vkengine::vulkan_core core(instance, gpus[0], device_extensions);
-	vkengine::allocator allocator(core);
-    vkengine::shader_manager shader_manager(core);
-
- //   VmaAllocationCreateInfo host_alloc_info = {};
- //   host_alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
- //   host_alloc_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
- //       VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
- //   uint32_t element_count = 1024;
-
- //   vkengine::host_visible_buffer<uint32_t> buffer(
-	//	allocator,
-	//	core,
-	//	element_count
-	//);
-
- //   vkengine::host_visible_buffer <uint32_t> group_sums(
- //       allocator,
- //       core,
- //       element_count
- //   );
-
- //   vkengine::host_visible_buffer<uint32_t> output(
- //       allocator,
- //       core,
- //       element_count
- //   );
-
- //   auto&& range = buffer.data();
- //   std::ranges::iota_view source(0u, range.size());
- //   std::ranges::copy(source, range.begin());
-
-	//vk::CommandBuffer cmd_buffer = core.device().allocateCommandBuffers(
-	//	vk::CommandBufferAllocateInfo()
-	//	.setCommandPool(core.compute_command_pool())
-	//	.setLevel(vk::CommandBufferLevel::ePrimary)
-	//	.setCommandBufferCount(1)
-	//).front();
-
-	//cmd_buffer.begin(vk::CommandBufferBeginInfo()
-	//	.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
-	//);
-
-	//inclusive_scan(
-	//	buffer,
-	//	output,
-	//	group_sums,
-	//	shader_manager,
-	//	cmd_buffer
-	//);
-
- //   cmd_buffer.end();
-
-	//core.compute_queue().submit(
-	//	vk::SubmitInfo()
-	//	.setCommandBuffers(cmd_buffer)
-	//);
-
-	//core.device().waitIdle();
-
-	//for (uint32_t data : output.data())
-	//	std::cout << data << " ";
-
- //   buffer.destroy();
- //   group_sums.destroy();
-	//output.destroy();
-
-	test_normalisation(core, allocator, shader_manager);
+    vk_state state(instance, gpus[0], device_extensions);
+    test_inclusive_scan(state);
+	test_normalisation(state);
 }

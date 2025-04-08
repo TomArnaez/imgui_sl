@@ -212,7 +212,7 @@ void shader_manager::setup_slang_session() {
     target_desc = {
         .format = SLANG_SPIRV,
         .profile = global_session->findProfile("spirv_1_6"),
-        .forceGLSLScalarBufferLayout = true
+        .forceGLSLScalarBufferLayout = false
     };
 
     std::vector<slang::CompilerOptionEntry> compiler_option_entries = {
@@ -222,7 +222,7 @@ void shader_manager::setup_slang_session() {
         },
         {
             .name = slang::CompilerOptionName::GLSLForceScalarLayout,
-            .value = {.kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1}
+            .value = {.kind = slang::CompilerOptionValueKind::Int, .intValue0 = 0}
         }
     };
 

@@ -51,9 +51,9 @@ void inclusive_scan(
 	);
 
 	struct inclusive_span_push_constants {
-		device_span<uint32_t> input;
-		device_span<uint32_t> output;
-		device_span<uint32_t> group_sums;
+		device_span input;
+		device_span output;
+		device_span group_sums;
 	};
 
 	inclusive_span_push_constants scan_push_constants = {
@@ -81,7 +81,7 @@ void inclusive_scan(
 
 	cmd_buffer.pipelineBarrier2(vk::DependencyInfo().setBufferMemoryBarriers(inclusive_scan_barrier));
 
-	dispatch_shader<device_span<uint32_t>>(
+	dispatch_shader<device_span>(
 		cmd_buffer,
 		shader_objects[1],
 		{1, 1, 1},

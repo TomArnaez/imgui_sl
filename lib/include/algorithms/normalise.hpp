@@ -9,8 +9,8 @@ constexpr uint32_t NORMALISE_WORKGROUP_SIZE_X = 128;
 
 template<typename T, typename U>
 struct normalise_push_constants {
-	device_span<T> input;
-	device_span<U> output;
+	device_span input;
+	device_span output;
 	T input_min;
 	T input_max;
 	U min;

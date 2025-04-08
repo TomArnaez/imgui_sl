@@ -33,10 +33,15 @@ struct allocation_policy_traits<access_policy::host_visible> {
     }
 };
 
-template<typename T>
 struct device_span {
     vk::DeviceAddress span;
     uint32_t size;
+};
+
+template<uint32_t dims>
+struct device_mdspan {
+    vk::DeviceAddress span;
+    std::array<uint32_t, dims> dims;
 };
 
 template<typename T, access_policy Policy = access_policy::device>
@@ -64,11 +69,11 @@ public:
         allocator.get().destroy_buffer(buffer);
     }
 
-    operator device_span<T>() {
+    operator device_span() {
         return device_span();
     }
 
-    device_span<T> device_span() {
+    device_span device_span() {
         return {
             .span = buffer_address,
             .size = element_count

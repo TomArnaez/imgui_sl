@@ -120,7 +120,9 @@ vulkan_core::vulkan_core(vk::Instance instance, const vkengine::gpu& gpu, std::v
             vk::PhysicalDeviceSynchronization2Features()
                 .setSynchronization2(true),
             vk::PhysicalDevice16BitStorageFeatures()
-                .setStoragePushConstant16(true)
+                .setStoragePushConstant16(true),
+            vk::PhysicalDeviceScalarBlockLayoutFeatures()
+                .setScalarBlockLayout(true)
         );
 
     device_ = gpu_.physical_device.createDevice(device_create_info_chain.get<vk::DeviceCreateInfo>());
