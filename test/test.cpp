@@ -4,6 +4,7 @@
 #include <algorithms/inclusive_scan.hpp>
 #include <algorithms/histogram.hpp>
 #include <algorithms/normalise.hpp>
+#include <algorithms/median_filter.hpp>
 #include <queue_family.hpp>
 #include <typed_buffer.hpp>
 #include <gpu.hpp>
@@ -149,6 +150,53 @@ void test_inclusive_scan(vk_state& state) {
    output.destroy();
 }
 
+void test_median_filter(vk_state& state) {
+    std::array<uint32_t, 2> shape = { 64, 64 };
+
+    vkengine::host_visible_buffer_nd<uint16_t, 2> input(
+        state.allocator,
+        state.core,
+        shape
+    );
+
+    vkengine::host_visible_buffer_nd<uint16_t, 2> output(
+        state.allocator,
+        state.core,
+        shape
+    );
+
+    auto&& range = input.data();
+    std::ranges::iota_view source(0u, shape[0] * shape[1]);
+    std::ranges::copy(source, range.begin());
+
+    vkengine::median_filter_operator median_filter_op(state.shader_manager);
+
+    vk::CommandBuffer cmd_buffer = state.core.device().allocateCommandBuffers(
+        vk::CommandBufferAllocateInfo()
+        .setCommandPool(state.core.compute_command_pool())
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandBufferCount(1)
+    ).front();
+
+    cmd_buffer.begin(vk::CommandBufferBeginInfo()
+        .setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit)
+    );
+
+    median_filter_op.record(input, output, cmd_buffer);
+
+    cmd_buffer.end();
+
+    state.core.compute_queue().submit(
+        vk::SubmitInfo()
+        .setCommandBuffers(cmd_buffer)
+    );
+
+    state.core.device().waitIdle();
+
+    for (uint16_t data : output.data())
+        std::cout << data << " ";
+}
+
 int main() {
     spdlog::set_level(spdlog::level::debug);
     VULKAN_HPP_DEFAULT_DISPATCHER.init();
@@ -183,6 +231,7 @@ int main() {
     }
 
     vk_state state(instance, gpus[0], device_extensions);
-    test_inclusive_scan(state);
-	test_normalisation(state);
+    test_median_filter(state);
+    //test_inclusive_scan(state);
+	//test_normalisation(state);
 }

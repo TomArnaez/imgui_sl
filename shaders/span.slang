@@ -21,7 +21,7 @@ public struct mdspan<T, let dims : uint> {
     private uint convert_index_to_1d(uint[dims] indices) {
         uint index = 0;
         uint multiplier = 1;
-        for (uint i = dims - 1; i != 0; --i) {
+        for (uint i = dims - 1; i >= 0; --i) {
             index += indices[i] * multiplier;
             multiplier *= extents_[i];
         }

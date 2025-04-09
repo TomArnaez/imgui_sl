@@ -17,10 +17,10 @@ struct normalise_push_constants {
 	U max;
 };
 
-template<typename T, typename U, access_policy policy>
+template<typename T, typename U, uint32_t dims, access_policy policy>
 void normalise(
-	typed_buffer<T, policy>& input,
-	typed_buffer<U, policy>& output,
+	typed_buffer<T, dims, policy>& input,
+	typed_buffer<U, dims, policy>& output,
 	T input_min,
 	T input_max,
 	U min,

@@ -9,11 +9,11 @@ namespace vkengine {
 
 constexpr uint32_t INCLUSIVE_SCAN_WORKGROUP_SIZE = 128;
 
-template<access_policy policy>
+template<uint32_t dims, access_policy policy>
 void inclusive_scan(
-	typed_buffer<uint32_t, policy>& input,
-	typed_buffer<uint32_t, policy>& output,
-	typed_buffer<uint32_t, policy>& group_sums,
+	typed_buffer<uint32_t, dims, policy>& input,
+	typed_buffer<uint32_t, dims, policy>& output,
+	typed_buffer<uint32_t, dims, policy>& group_sums,
 	shader_manager& shader_manager,
 	vk::CommandBuffer cmd_buffer
 ) {
@@ -57,9 +57,9 @@ void inclusive_scan(
 	};
 
 	inclusive_span_push_constants scan_push_constants = {
-		.input = input.device_span(),
-		.output = output.device_span(),
-		.group_sums = group_sums.device_span()
+		.input = input,
+		.output = output,
+		.group_sums = group_sums
 	};
 
 	dispatch_shader(
@@ -86,7 +86,7 @@ void inclusive_scan(
 		shader_objects[1],
 		{1, 1, 1},
 		vk::ShaderStageFlagBits::eCompute,
-		group_sums.device_span()
+		group_sums
 	);
 
 	{
