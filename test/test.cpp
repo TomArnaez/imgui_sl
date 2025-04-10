@@ -194,7 +194,7 @@ void test_median_filter(vk_state& state) {
     state.core.device().waitIdle();
 
     for (uint16_t data : output.data())
-        std::cout << data << " ";
+        std::cout << data << std::endl;
 }
 
 int main() {
