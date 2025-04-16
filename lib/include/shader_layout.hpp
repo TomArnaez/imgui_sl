@@ -223,6 +223,7 @@ struct shader_layout {
 	std::vector<entry_point_layout> entry_point_layouts;
 };
 
+
 shader_layout create_pipeline_layout(slang::ProgramLayout* program_layout, std::reference_wrapper<vulkan_core> vulkan_core) {
 	pipeline_layout_builder pipeline_layout_builder_(vulkan_core);
 	pipeline_layout_builder::descriptor_set_layout_builder descriptor_set_layout_builder(vulkan_core, pipeline_layout_builder_);

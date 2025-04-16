@@ -5,7 +5,6 @@
 #include <algorithms/histogram.hpp>
 #include <algorithms/normalise.hpp>
 #include <algorithms/median_filter.hpp>
-#include <shader_object_layout.hpp>
 #include <typed_buffer.hpp>
 #include <gpu.hpp>
 #include <ranges>

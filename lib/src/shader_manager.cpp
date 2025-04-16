@@ -6,6 +6,8 @@
 #include <spdlog/fmt/ranges.h>
 #include <ranges>
 
+#include <shader_object_layout.hpp>
+
 namespace vkengine {
 
 shader_manager::shader_manager(std::reference_wrapper<vulkan_core> vulkan_core)
@@ -118,7 +120,14 @@ std::vector<shader_object> shader_manager::load_shader(
 		throw_exception_with_slang_diagnostics("Failed to link program");
 
     slang::ProgramLayout* layout = linked_program->getLayout();
+
+
+
     slang::EntryPointReflection* entry_point_reflection = layout->getEntryPointByIndex(0);
+
+    root_shader_layout_builder builder;
+    builder.add_global_params(layout->getGlobalParamsVarLayout());
+    builder.add_entry_point(entry_point_reflection);
 
     vk::ShaderStageFlagBits stage;
 
@@ -137,6 +146,7 @@ std::vector<shader_object> shader_manager::load_shader(
         throw_exception_with_slang_diagnostics("Failed to create spirv code");
 
 	slang::ProgramLayout* program_layout = linked_program->getLayout();
+
 
     shader_layout shader_layout = create_pipeline_layout(program_layout, vulkan.get());
 

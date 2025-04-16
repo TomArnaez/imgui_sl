@@ -16,8 +16,8 @@ struct allocation_policy_traits;
 template<>
 struct allocation_policy_traits<access_policy::device> {
     static VmaAllocationCreateInfo get_allocation_create_info() {
-        return VmaAllocationCreateInfo{
-            .flags = 0,  // Device-local by default
+        return VmaAllocationCreateInfo {
+            .flags = 0,
             .usage = VMA_MEMORY_USAGE_AUTO
         };
     }
@@ -26,7 +26,7 @@ struct allocation_policy_traits<access_policy::device> {
 template<>
 struct allocation_policy_traits<access_policy::host_visible> {
     static VmaAllocationCreateInfo get_allocation_create_info() {
-        return VmaAllocationCreateInfo{
+        return VmaAllocationCreateInfo {
             .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
             .usage = VMA_MEMORY_USAGE_AUTO
         };
@@ -40,8 +40,8 @@ struct device_span {
 
 template<uint32_t dims>
 struct device_mdspan {
-    vk::DeviceAddress span;
-    std::array<uint32_t, dims> dims;
+    vk::DeviceAddress           span;
+    std::array<uint32_t, dims>  dims;
 };
 
 template<typename T, uint32_t dims = 1, access_policy policy = access_policy::device>
