@@ -127,7 +127,7 @@ std::vector<shader_object> shader_manager::load_shader(
 
     root_shader_layout_builder builder;
     builder.add_global_params(layout->getGlobalParamsVarLayout());
-    builder.add_entry_point(entry_point_reflection);
+    //builder.add_entry_point(entry_point_reflection);
 
     vk::ShaderStageFlagBits stage;
 

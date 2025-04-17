@@ -7,6 +7,7 @@
 #include <algorithms/median_filter.hpp>
 #include <typed_buffer.hpp>
 #include <gpu.hpp>
+#include <shader_print_buffer.hpp>
 #include <ranges>
 #include <iostream>
 

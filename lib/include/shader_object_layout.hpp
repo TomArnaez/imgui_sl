@@ -122,16 +122,16 @@ public:
 		// First we will scan through all the descriptor sets that the Slang reflection
 		// information believes go into making up the given type.
 
-		uint32_t descriptor_set_count = type_layout->getDescriptorSetCount();
-		for (uint32_t i = 0; i < descriptor_set_count; ++i) {
-			uint32_t descriptor_range_count = type_layout->getDescriptorSetDescriptorRangeCount(i);
-			if (descriptor_range_count == 0)
-				continue;
+		//uint32_t descriptor_set_count = type_layout->getDescriptorSetCount();
+		//for (uint32_t i = 0; i < descriptor_set_count; ++i) {
+		//	uint32_t descriptor_range_count = type_layout->getDescriptorSetDescriptorRangeCount(i);
+		//	if (descriptor_range_count == 0)
+		//		continue;
 
-			uint32_t global_set_idx = offset.binding_set + type_layout->getDescriptorSetSpaceOffset(i);
-			if (!descriptor_set_infos_.contains(global_set_idx))
-				descriptor_set_infos_[global_set_idx] = descriptor_set_info{};
-		}
+		//	uint32_t global_set_idx = offset.binding_set + type_layout->getDescriptorSetSpaceOffset(i);
+		//	if (!descriptor_set_infos_.contains(global_set_idx))
+		//		descriptor_set_infos_[global_set_idx] = descriptor_set_info{};
+		//}
 
 		uint32_t binding_range_count = type_layout->getBindingRangeCount();
 		for (uint32_t binding_range_idx = 0; binding_range_idx < binding_range_count; ++binding_range_idx) {
@@ -157,7 +157,7 @@ public:
 				continue;
 
 			uint32_t slang_descriptor_set_index = type_layout->getBindingRangeDescriptorSetIndex(binding_range_idx);
-			descriptor_set_info& descriptor_set_info = descriptor_set_infos_[offset.binding_set + type_layout->getDescriptorSetSpaceOffset(slang_descriptor_set_index)];
+			descriptor_set_info& descriptor_set_info = find_or_add_descriptor_set(offset.binding_set + type_layout->getDescriptorSetSpaceOffset(slang_descriptor_set_index));
 
 			uint32_t first_descriptor_range_index = type_layout->getBindingRangeFirstDescriptorRangeIndex(binding_range_idx);
 			for (uint32_t descriptor_range_index = first_descriptor_range_index; descriptor_range_index < first_descriptor_range_index + descriptor_range_count; ++descriptor_range_index) {
