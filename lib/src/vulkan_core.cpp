@@ -1,4 +1,4 @@
-#include <vulkan/vulkan.hpp>
+﻿#include <vulkan/vulkan.hpp>
 #include <vulkan_core.hpp>
 #include <spdlog/spdlog.h>
 #include <detailed_exception.hpp>
@@ -12,19 +12,32 @@ bool vulkan_core::is_extension_available(const std::vector<vk::ExtensionProperti
     return false;
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL vulkan_core::debug_report_callback(
-    VkDebugReportFlagsEXT      flags,
-    VkDebugReportObjectTypeEXT object_type,
-    uint64_t                   object,
-    size_t                     location,
-    int32_t                    message_code,
-    const char* p_layer_prefix,
-    const char* p_message,
-    void* p_user_data
-) {
-    spdlog::error("Validation Layer ({}): {}", p_layer_prefix, p_message);
+#ifdef APP_USE_VULKAN_DEBUG_UTILS
+VKAPI_ATTR VkBool32 VKAPI_CALL debug_utils_messenger_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
+    VkDebugUtilsMessageTypeFlagsEXT             message_type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void*                                       /*p_user_data*/) {
+
+    const char* severity_str = "INFO";
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        severity_str = "ERROR";
+    }
+    else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        severity_str = "WARN";
+    }
+    else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+        severity_str = "TRACE";
+    }
+
+    spdlog::log(spdlog::level::from_str(severity_str),
+        "Validation Layer ({}): {}",
+        callback_data->pMessageIdName,
+        callback_data->pMessage);
+
     return VK_FALSE;
 }
+#endif // APP_USE_VULKAN_DEBUG_UTILS
 
 uint32_t vulkan_core::find_dedicated_transfer_family(const std::vector<vk::QueueFamilyProperties>& families) {
     // Look for transfer-only family
@@ -71,12 +84,19 @@ uint32_t vulkan_core::find_graphics_family(const std::vector<vk::QueueFamilyProp
 
 vulkan_core::vulkan_core(vk::Instance instance, const vkengine::gpu& gpu, std::vector<const char*> device_extensions)
     : instance_(instance), gpu_(gpu) {
-#ifdef APP_USE_VULKAN_DEBUG_REPORT
-    debug_report_ = instance_.createDebugReportCallbackEXT(
-        vk::DebugReportCallbackCreateInfoEXT()
-        .setFlags(vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning)
-        .setPfnCallback(debug_report_callback)
-    );
+#ifdef APP_USE_VULKAN_DEBUG_UTILS
+    debug_utils_messenger_ = instance_.createDebugUtilsMessengerEXT(
+        vk::DebugUtilsMessengerCreateInfoEXT{}
+        .setMessageSeverity(
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo)
+        .setMessageType(
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
+        .setPfnUserCallback(debug_utils_messenger_callback));
 #endif
 
     transfer_queue_family_ = find_dedicated_transfer_family(gpu_.queue_family_properties);

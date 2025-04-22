@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <numeric>
 #include <vulkan_core.hpp>
 #include <allocator.hpp>
 
@@ -153,7 +154,6 @@ public:
     }
 private:
     using addr_base = device_address_holder<device_addressable<kind>>;
-
     std::reference_wrapper<allocator>   allocator_;
     [[no_unique_address]] addr_base     address_;
     buffer                              buffer_;

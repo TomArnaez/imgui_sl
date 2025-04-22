@@ -7,7 +7,6 @@
 #include <algorithms/median_filter.hpp>
 #include <typed_buffer.hpp>
 #include <gpu.hpp>
-#include <shader_print_buffer.hpp>
 #include <ranges>
 #include <iostream>
 
@@ -203,24 +202,34 @@ int main() {
 
     std::vector<const char*> instance_extensions;
     vk::ApplicationInfo app_info("Dear ImGui Vulkan App", 1, "No Engine", 1, VK_API_VERSION_1_4);
+
     auto available_extensions = vk::enumerateInstanceExtensionProperties(nullptr);
     if (is_extension_available(available_extensions, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME))
         instance_extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+    instance_extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+
     std::vector<const char*> layers;
-#ifdef APP_USE_VULKAN_DEBUG_REPORT
+#ifdef APP_USE_VULKAN_DEBUG_UTILS
     layers.emplace_back("VK_LAYER_KHRONOS_validation");
-    instance_extensions.push_back("VK_EXT_debug_report");
+    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
+
+    auto validation_features_enables = std::array{ vk::ValidationFeatureEnableEXT::eDebugPrintf };
+    auto validation_features = vk::ValidationFeaturesEXT()
+        .setEnabledValidationFeatures(validation_features_enables);
+
     auto instance_ci = vk::InstanceCreateInfo()
         .setPApplicationInfo(&app_info)
         .setPEnabledExtensionNames(instance_extensions)
-        .setPEnabledLayerNames(layers);
+        .setPEnabledLayerNames(layers)
+        .setPNext(&validation_features);
 
     vk::Instance instance = vk::createInstance(instance_ci);
     VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
 
     std::vector<const char*> device_extensions = {
-        VK_EXT_SHADER_OBJECT_EXTENSION_NAME
+        VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
     };
 
     auto gpus = vkengine::enumerate_gpus(instance);

@@ -41,13 +41,9 @@ void normalise(
 
 	shader_manager::entry_point_compile_info entry_point_compile_info = {
 		.name = "normalise",
-		//.specialisation_type_names = {
-		//	type_name<T>::value,
-		//	type_name<U>::value
-		//}
 	};
 
-	auto shader_object = shader_manager.load_shader(
+	auto shader_program = shader_manager.load_shader(
 		std::string(VKENGINE_SHADER_DIR) + "/normalise.slang",
 		{ entry_point_compile_info },
 		{ workgroup_module }
@@ -66,7 +62,7 @@ void normalise(
 
 	dispatch_shader(
 		cmd_buffer,
-		shader_object[0],
+		shader_program.entry_points[0],
 		workgroup_counts,
 		vk::ShaderStageFlagBits::eCompute,
 		push_constants

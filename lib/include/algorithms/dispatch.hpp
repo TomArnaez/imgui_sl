@@ -10,7 +10,7 @@ constexpr uint32_t VULKAN_PUSH_CONSTANT_SIZE_LIMIT = 128;
 
 void dispatch_shader_impl(
     vk::CommandBuffer cmd,
-    const shader_object& shader,
+    const shader_entry_point& shader,
     const std::array<uint32_t, 3>& group_counts,
     vk::ShaderStageFlagBits shader_stage_flags
 ) {
@@ -21,7 +21,7 @@ void dispatch_shader_impl(
 template<typename TPushConstants>
 void dispatch_shader(
     vk::CommandBuffer cmd,
-    const shader_object& shader,
+    const shader_entry_point& shader,
     const std::array<uint32_t, 3>& group_counts,
     vk::ShaderStageFlagBits shader_stage_flags,
     const TPushConstants& push_constants
@@ -46,7 +46,7 @@ void dispatch_shader(
 
 void dispatch_shader(
     vk::CommandBuffer cmd,
-    const shader_object& shader,
+    const shader_entry_point& shader,
     const std::array<uint32_t, 3>& group_counts,
     vk::ShaderStageFlagBits shader_stage_flags
 ) {

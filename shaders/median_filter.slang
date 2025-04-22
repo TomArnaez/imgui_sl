@@ -4,19 +4,11 @@ static const uint KERNEL_SIZE = 3;
 static const int32_t RADIUS = (KERNEL_SIZE - 1) / 2;
 
 import span;
-//import printing;
 
 groupshared uint16_t shared_tile[MEDIAN_FILTER_WORKGROUP_SIZE_Y + KERNEL_SIZE - 1][MEDIAN_FILTER_WORKGROUP_SIZE_X + KERNEL_SIZE - 1];
 
 uint16_t sort9(uint32_t thread_tile_index_y, uint32_t thread_tile_index_x) {
     uint16_t window[9];
-
-    #define SWAP(i, j)                  \
-        if (window[i] > window[j]) {    \
-            uint16_t tmp = window[i];   \
-            window[i] = window[j];      \
-            window[j] = tmp;            \
-        }
 
     uint32_t index = 0;
     for (int32_t dy = -RADIUS; dy <= RADIUS; ++dy) {
@@ -24,6 +16,13 @@ uint16_t sort9(uint32_t thread_tile_index_y, uint32_t thread_tile_index_x) {
             window[index++] = shared_tile[thread_tile_index_y + dy][thread_tile_index_x + dx];
         }
     }
+
+    #define SWAP(i, j)                  \
+        if (window[i] > window[j]) {    \
+            uint16_t tmp = window[i];   \
+            window[i] = window[j];      \
+            window[j] = tmp;            \
+        }
 
     SWAP(1, 0);
 
@@ -48,7 +47,7 @@ void median_filter(
 	uniform mdspan<uint16_t, 2> input,
 	uniform mdspan<uint16_t, 2> output,
 	uint3 group_id: SV_GroupID,
-	uint3 global_id: SV_DispatchThreadID,
+    uint3 global_id: SV_DispatchThreadID,
     uint3 group_thread_id: SV_GroupThreadID
 ) {
     if (global_id.x >= input.extents[1] || global_id.y >= input.extents[0])
@@ -59,15 +58,18 @@ void median_filter(
     int32_t base_x = group_id.x * MEDIAN_FILTER_WORKGROUP_SIZE_X - RADIUS;
     int32_t base_y = group_id.y * MEDIAN_FILTER_WORKGROUP_SIZE_Y - RADIUS;
 
+    if (global_id.x == 0 && global_id.y == 0)
+        printf("Test hi");
+
     // We need to fill shared_tile
     // We can do that by letting each thread load multiple pixels in steps of the workgroup size
     for (uint load_x = group_thread_id.x; load_x < MEDIAN_FILTER_WORKGROUP_SIZE_X + (KERNEL_SIZE - 1); load_x += MEDIAN_FILTER_WORKGROUP_SIZE_X) {
         for (uint load_y = group_thread_id.y; load_y < MEDIAN_FILTER_WORKGROUP_SIZE_Y + (KERNEL_SIZE - 1); load_y += MEDIAN_FILTER_WORKGROUP_SIZE_Y) {
-            uint global_x = base_x + load_x;
-            uint global_y = base_y + load_y;
+            int32_t global_x = base_x + load_x;
+            int32_t global_y = base_y + load_y;
 
-            global_y = clamp(global_y, 0, input.extents[0] - 1);
-            global_x = clamp(global_x, 0, input.extents[1] - 1);
+            global_y = clamp(global_y, 0, int32_t(input.extents[0] - 1));
+            global_x = clamp(global_x, 0, int32_t(input.extents[1] - 1));
 
             shared_tile[load_y][load_x] = input[ { global_y, global_x }];
 		}

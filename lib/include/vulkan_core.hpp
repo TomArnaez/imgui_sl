@@ -12,7 +12,7 @@ public:
         vk::PhysicalDeviceSubgroupProperties subgroup_properties;
     };
 private:
-    VkDebugReportCallbackEXT debug_report_ = VK_NULL_HANDLE;
+    vk::DebugUtilsMessengerEXT debug_utils_messenger_ = VK_NULL_HANDLE;
 
     vk::Instance        instance_;
 	gpu                 gpu_;

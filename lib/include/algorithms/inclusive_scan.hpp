@@ -34,7 +34,7 @@ void inclusive_scan(
 		"workgroup_module"
 	);
 
-	auto shader_objects = shader_manager.load_shader(
+	auto shader_program = shader_manager.load_shader(
 		std::string(VKENGINE_SHADER_DIR) + "/inclusive_scan.slang",
 		{
 			shader_manager::entry_point_compile_info {
@@ -64,7 +64,7 @@ void inclusive_scan(
 
 	dispatch_shader(
 		cmd_buffer,
-		shader_objects[0],
+		shader_program.entry_points[0],
 		dispatch_counts,
 		vk::ShaderStageFlagBits::eCompute,
 		scan_push_constants
@@ -83,7 +83,7 @@ void inclusive_scan(
 
 	dispatch_shader<device_span>(
 		cmd_buffer,
-		shader_objects[1],
+		shader_program.entry_points[1],
 		{1, 1, 1},
 		vk::ShaderStageFlagBits::eCompute,
 		group_sums
@@ -113,7 +113,7 @@ void inclusive_scan(
 
 	dispatch_shader(
 		cmd_buffer,
-		shader_objects[2],
+		shader_program.entry_points[2],
 		{group_count, 1, 1},
 		vk::ShaderStageFlagBits::eCompute,
 		scan_push_constants

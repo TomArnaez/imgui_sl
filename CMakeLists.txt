@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30.0)
+﻿cmake_minimum_required(VERSION 3.30.0)
 project(imgui_test VERSION 0.1.0 LANGUAGES C CXX)
 
 add_subdirectory(test)
@@ -6,8 +6,7 @@ add_subdirectory(test)
 add_library(vulkan_engine
     lib/src/shader_manager.cpp
     lib/src/allocator.cpp
-    lib/src/vulkan_core.cpp
-)
+    lib/src/vulkan_core.cpp)
 
 target_include_directories(vulkan_engine PUBLIC lib/include PRIVATE lib/src)
 
@@ -38,23 +37,28 @@ add_custom_target(copy_shaders ALL
 )
 
 target_link_libraries(vulkan_engine
-    PUBLIC
-        Vulkan::Vulkan
-        Vulkan::Headers
-        spdlog::spdlog
-    PRIVATE 
-        slang
-        glfw
-        GPUOpen::VulkanMemoryAllocator
-        spdlog::spdlog
+PUBLIC
+    Vulkan::Vulkan
+    Vulkan::Headers
+    spdlog::spdlog
+PRIVATE 
+    slang
+    glfw
+    GPUOpen::VulkanMemoryAllocator
+    spdlog::spdlog
 )
 
-target_compile_features(vulkan_engine PRIVATE cxx_std_23)
-target_compile_definitions(vulkan_engine PUBLIC 
-    "$<$<CONFIG:Debug>:APP_USE_VULKAN_DEBUG_REPORT>"
+target_compile_features(vulkan_engine 
+PRIVATE 
+    cxx_std_23
+)
+
+target_compile_definitions(vulkan_engine 
+PUBLIC 
     "VKENGINE_SHADER_DIR=\"${SHADER_OUTPUT_DIR}\""
+    $<$<CONFIG:Debug>:APP_USE_VULKAN_DEBUG_UTILS>
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
-    PRIVATE
+PRIVATE
     VMA_IMPLEMENTATION
     VMA_STATIC_VULKAN_FUNCTIONS=0
     VMA_DYNAMIC_VULKAN_FUNCTIONS=1

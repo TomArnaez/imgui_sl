@@ -1,14 +1,15 @@
 {
     "name": "myproject",
     "version-string": "0.1.0",
-    "dependencies": [
-        {
-            "name": "imgui",
-            "features": [ "glfw-binding",  "vulkan-binding", "docking-experimental" ]
-        },
-        "glfw3",
-        "shader-slang",
-        "spdlog",
-        "vulkan-memory-allocator"
-    ]
+  "dependencies": [
+    {
+      "name": "imgui",
+      "features": [ "glfw-binding", "vulkan-binding", "docking-experimental" ]
+    },
+    "glfw3",
+    "range-v3",
+    "shader-slang",
+    "spdlog",
+    "vulkan-memory-allocator"
+  ]
 }

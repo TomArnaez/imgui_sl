@@ -1,5 +1,6 @@
 #pragma once
 
+#include <shader_layout.hpp>
 #include <vulkan_core.hpp>
 #include <type_traits>
 
@@ -9,11 +10,16 @@
 
 namespace vkengine {
 
-struct shader_object {
+struct shader_entry_point {
     vk::PipelineLayout      pipeline_layout;
     vk::PushConstantRange   push_constant_range;
     vk::ShaderEXT           shader_ext;
     vk::ShaderStageFlagBits stage;
+};
+
+struct shader_program {
+    root_shader_object_layout       root_layout;
+    std::vector<shader_entry_point> entry_points;
 };
 
 class shader_manager {
@@ -29,7 +35,7 @@ public:
         const std::string& source_string,
         const std::string& module_name
     );
-    std::vector<shader_object> load_shader(
+    shader_program load_shader(
         const std::string& module_name,
         const std::vector<entry_point_compile_info>& entry_point_infos,
         const std::vector<Slang::ComPtr<slang::IModule>> modules
@@ -39,9 +45,6 @@ private:
 
     void setup_slang_session();
     void create_subgroup_module();
-
-    void log_scope(slang::VariableLayoutReflection* scope_variable_layout);
-	void log_variable_layout(slang::VariableLayoutReflection* variable_layout);
 
     std::reference_wrapper<vulkan_core>     vulkan;
 

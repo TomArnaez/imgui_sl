@@ -1,12 +1,12 @@
-#include <vulkan/vulkan.hpp>
+﻿#include <vulkan/vulkan.hpp>
 #include <shader_manager.hpp>
 #include <shader_layout.hpp>
 #include <spdlog/spdlog.h>
 #include <detailed_exception.hpp>
 #include <spdlog/fmt/ranges.h>
 #include <ranges>
+#include <fstream>
 
-#include <shader_object_layout.hpp>
 
 namespace vkengine {
 
@@ -53,7 +53,7 @@ Slang::ComPtr<slang::IModule> shader_manager::create_shader_module_from_source_s
 	return module;
 }
 
-std::vector<shader_object> shader_manager::load_shader(
+shader_program shader_manager::load_shader(
     const std::string& module_name,
     const std::vector<entry_point_compile_info>& entry_point_infos,
     const std::vector<Slang::ComPtr<slang::IModule>> modules
@@ -100,7 +100,7 @@ std::vector<shader_object> shader_manager::load_shader(
 					entry_point = specialised_entry_point.get();
                 }
                 return entry_point;
-                })
+            })
         | std::ranges::to<std::vector>();
 
     std::vector<slang::IComponentType*> components = { module, subgroup_module };
@@ -121,23 +121,7 @@ std::vector<shader_object> shader_manager::load_shader(
 
     slang::ProgramLayout* layout = linked_program->getLayout();
 
-
-
-    slang::EntryPointReflection* entry_point_reflection = layout->getEntryPointByIndex(0);
-
-    root_shader_layout_builder builder;
-    builder.add_global_params(layout->getGlobalParamsVarLayout());
-    //builder.add_entry_point(entry_point_reflection);
-
-    vk::ShaderStageFlagBits stage;
-
-    switch (entry_point_reflection->getStage()) {
-    case SLANG_STAGE_COMPUTE:
-        stage = vk::ShaderStageFlagBits::eCompute;
-        break;
-    default:
-        throw detailed_exception("Unsupported shader stage");
-    }
+    vk::ShaderStageFlagBits stage = vk::ShaderStageFlagBits::eCompute;
 
     Slang::ComPtr<slang::IBlob> spirv_code;
     linked_program->getTargetCode(0, spirv_code.writeRef(), diagnostics.writeRef());
@@ -147,73 +131,62 @@ std::vector<shader_object> shader_manager::load_shader(
 
 	slang::ProgramLayout* program_layout = linked_program->getLayout();
 
+    auto entry_point_count = program_layout->getEntryPointCount();
+    root_shader_layout_builder builder;
 
-    shader_layout shader_layout = create_pipeline_layout(program_layout, vulkan.get());
+    builder.add_global_params(program_layout->getGlobalParamsVarLayout(), vulkan);
+    for (uint32_t idx : std::views::iota(0u) | std::views::take(entry_point_count))
+        builder.add_entry_point(program_layout->getEntryPointByIndex(idx), vulkan);
 
-    for (auto* reflection : std::views::iota(0u, program_layout->getEntryPointCount())
-        | std::views::transform([=, this](auto i) {return program_layout->getEntryPointByIndex(i); })) {
-		log_scope(reflection->getVarLayout());
-    }
+    root_shader_object_layout root_layout = builder.build();
 
-    slang::TypeLayoutReflection* type_layout = entry_point_reflection->getTypeLayout();
-
-    uint32_t param_count = entry_point_reflection->getParameterCount();
-
-    for (uint32_t param_idx = 0; param_idx < param_count; ++param_idx) {
-        slang::VariableLayoutReflection* param = entry_point_reflection->getParameterByIndex(param_idx);
-
-        slang::TypeLayoutReflection*    type_layout = param->getTypeLayout();
-        slang::ParameterCategory        category = param->getCategory();
-        uint32_t                        category_count = param->getCategoryCount();
-
-        spdlog::debug(
-            "Param at index: {}, name: {}, category_count: {}, category: {}, offset: {}, alignment: {}, size: {}",
-            param_idx,
-            param->getName(),
-            category_count,
-            static_cast<uint32_t>(category),
-            param->getOffset(),
-            type_layout->getAlignment(),
-            type_layout->getSize()
-        );
-    }
-
-    std::vector<shader_object> shader_objects;
-
-	for (auto [index, entry_point_layout] : std::views::enumerate(shader_layout.entry_point_layouts)) {
+    auto shader_objects = std::views::iota(0u, entry_point_count) | std::views::transform([&](uint32_t idx) {
         Slang::ComPtr<slang::IBlob> entry_point_code;
         linked_program->getEntryPointCode(
-            index,
-            0,
+            idx, 0,
             entry_point_code.writeRef(),
-            diagnostics.writeRef()
-        );
+            diagnostics.writeRef());
 
-		if (!entry_point_code)
-			throw_exception_with_slang_diagnostics("Failed to create entry point code");
+        if (!entry_point_code)
+            throw_exception_with_slang_diagnostics("Failed to create entry point code");
 
-        vk::ResultValue<vk::ShaderEXT> shader_obj = vulkan.get().device().createShaderEXT(
-            vk::ShaderCreateInfoEXT()
-            .setStage(stage)
-            .setCodeType(vk::ShaderCodeTypeEXT::eSpirv)
-            .setCodeSize(spirv_code->getBufferSize())
-            .setPName(entry_point_layout.name.c_str())
-            .setPCode(static_cast<const uint32_t*>(spirv_code->getBufferPointer()))
-            .setPushConstantRanges(entry_point_layout.push_constant_ranges)
-        );
+        auto set_layouts = root_layout.entry_point_descriptor_sets(idx) | std::ranges::to<std::vector<vk::DescriptorSetLayout>>();
+        auto& push_constants = root_layout.entry_push_constants(idx);
+
+        auto pipeline_layout = vulkan.get().device()
+            .createPipelineLayout(
+                vk::PipelineLayoutCreateInfo{}
+                .setSetLayouts(set_layouts)
+                .setPushConstantRanges(push_constants)
+            );
+
+        auto shader_obj = vulkan.get().device()
+            .createShaderEXT(
+                vk::ShaderCreateInfoEXT{}
+                .setStage(stage)
+                .setCodeType(vk::ShaderCodeTypeEXT::eSpirv)
+                .setCodeSize(spirv_code->getBufferSize())
+                .setPName(root_layout.entry_points[idx].name.c_str())
+                .setPCode(static_cast<const uint32_t*>(spirv_code->getBufferPointer()))
+                .setPushConstantRanges(push_constants)
+                .setSetLayouts(set_layouts)
+            );
 
         if (shader_obj.result != vk::Result::eSuccess)
             throw detailed_exception("Failed to create shader object");
 
-        shader_objects.emplace_back(shader_object{
-            .pipeline_layout = entry_point_layout.pipeline_layout,
-            .push_constant_range = entry_point_layout.push_constant_ranges[0],
+        return shader_entry_point {
+            .pipeline_layout = pipeline_layout,
+            .push_constant_range = push_constants[0],
             .shader_ext = shader_obj.value,
             .stage = stage
-            });
-	}
+        };
+    });
 
-    return shader_objects;
+    return shader_program {
+        .root_layout = root_layout,
+        .entry_points = shader_objects | std::ranges::to<std::vector<shader_entry_point>>()
+    };
 }
 
 void shader_manager::setup_slang_session() {
@@ -257,42 +230,6 @@ void shader_manager::create_subgroup_module() {
 
     if (!subgroup_module)
         throw std::runtime_error("Failed to create subgroup module");
-}
-
-void shader_manager::log_scope(slang::VariableLayoutReflection* scope_variable_layout) {
-    auto type_layout = scope_variable_layout->getTypeLayout();
-
-    switch (type_layout->getKind()) {
-    case slang::TypeReflection::Kind::Struct:
-    {
-        spdlog::debug("Scope type is struct");
-        for (auto* param : std::views::iota(0u, type_layout->getFieldCount())| std::views::transform([&](auto i) {return type_layout->getFieldByIndex(i); })) {
-            log_variable_layout(param);
-        }
-        break;
-    }
-    case slang::TypeReflection::Kind::ConstantBuffer:
-        spdlog::debug("Scope type is constant buffer");
-        log_scope(type_layout->getElementVarLayout());
-        break;
-    case slang::TypeReflection::Kind::ParameterBlock:
-        spdlog::debug("Scope type is parameter block");
-        break;
-    default:
-        spdlog::debug("Scope type is unknown");
-    }
-}
-
-void shader_manager::log_variable_layout(slang::VariableLayoutReflection* variable_layout) {
-	auto type_layout = variable_layout->getTypeLayout();
-    
-	spdlog::debug("Variable name: {}", variable_layout->getName());
-	spdlog::debug("Type name: {}", type_layout->getName());
-
-    if (type_layout->getSize() > 0) {
-        spdlog::debug("Size in bytes: {}", type_layout->getSize());
-		spdlog::debug("Alignment in bytes: {}", type_layout->getAlignment());
-    }
 }
 
 }

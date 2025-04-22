@@ -16,7 +16,6 @@ struct median_filter_push_constants {
 };
 
 class median_filter_operator {
-	shader_object median_filter_shader_object;
 public:
 	median_filter_operator(shader_manager& shader_manager) {
 		auto workgroup_module = shader_manager.create_shader_module_from_source_string(
@@ -26,29 +25,32 @@ public:
 				MEDIAN_FILTER_WORKGROUP_SIZE_X, MEDIAN_FILTER_WORKGROUP_SIZE_Y
 			), "workgroup_module" );
 
-		median_filter_shader_object = shader_manager.load_shader(
+		median_filter_entry_point_ = shader_manager.load_shader(
 			"median_filter",
 			{ shader_manager::entry_point_compile_info { .name = "median_filter" } },
 			{ workgroup_module }
-		)[0];
+		).entry_points[0];
 	}
 
 	template<access_policy policy>
 	void record(
-		typed_buffer<uint16_t, 2, policy>& input,
-		typed_buffer<uint16_t, 2, policy>& output,
-		vk::CommandBuffer cmd_buffer
+		typed_buffer<uint16_t, 2, policy>&	input,
+		typed_buffer<uint16_t, 2, policy>&	output,
+		vk::CommandBuffer					cmd_buffer
 	) {
-		record_median_filter(input, output, median_filter_shader_object, cmd_buffer);
+		record_median_filter(input, output, median_filter_entry_point_, cmd_buffer);
 	}
+
+private:
+	shader_entry_point median_filter_entry_point_;
 };
 
 template<access_policy policy>
 void record_median_filter(
-	typed_buffer<uint16_t, 2, policy>& input,
-	typed_buffer<uint16_t, 2, policy>& output,
-	shader_object& median_filter_shader_object,
-	vk::CommandBuffer cmd_buffer
+	typed_buffer<uint16_t, 2, policy>&	input,
+	typed_buffer<uint16_t, 2, policy>&	output,
+	shader_entry_point&					median_filter_entry_point,
+	vk::CommandBuffer					cmd_buffer
 ) {
 	median_filter_push_constants push_constants = {
 		.input = input,
@@ -63,7 +65,7 @@ void record_median_filter(
 
 	dispatch_shader(
 		cmd_buffer,
-		median_filter_shader_object,
+		median_filter_entry_point,
 		workgroup_counts,
 		vk::ShaderStageFlagBits::eCompute,
 		push_constants

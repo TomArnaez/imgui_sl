@@ -1,256 +1,388 @@
 #pragma once
 
-#include <ranges>
+#include <slang.h>
+#include <map>
+#include <vulkan/vulkan_structs.hpp>
+#include <vulkan_core.hpp>
+#include <range/v3/view/concat.hpp>
 
 namespace vkengine {
 
-vk::DescriptorType map_slang_binding_type_to_vk(slang::BindingType binding_type) {
+inline vk::DescriptorType map_descriptor_type(slang::BindingType binding_type) {
 	switch (binding_type) {
-	case slang::BindingType::Sampler: return vk::DescriptorType::eSampler;
-	case slang::BindingType::Texture: return vk::DescriptorType::eSampledImage;
+	case slang::BindingType::PushConstant:
 	default:
-		assert(!"Unexpected binding type");
+		assert(false && "unsupported binding type");
+		return static_cast<vk::DescriptorType>(-1);
+	case slang::BindingType::Sampler:
+		return vk::DescriptorType::eSampler;
+	case slang::BindingType::CombinedTextureSampler:
+		return vk::DescriptorType::eCombinedImageSampler;
+	case slang::BindingType::Texture:
+		return vk::DescriptorType::eSampledImage;
+	case slang::BindingType::MutableTexture:
+		return vk::DescriptorType::eStorageImage;
+	case slang::BindingType::TypedBuffer:
+		return vk::DescriptorType::eUniformTexelBuffer;
+	case slang::BindingType::MutableTypedBuffer:
+		return vk::DescriptorType::eStorageTexelBuffer;
+	case slang::BindingType::RawBuffer:
+	case slang::BindingType::MutableRawBuffer:
+		return vk::DescriptorType::eStorageBuffer;
+	case slang::BindingType::InputRenderTarget:
+		return vk::DescriptorType::eInputAttachment;
+	case slang::BindingType::InlineUniformData:
+		return vk::DescriptorType::eInlineUniformBlockEXT;
+	case slang::BindingType::RayTracingAccelerationStructure:
+		return vk::DescriptorType::eAccelerationStructureKHR;
+	case slang::BindingType::ConstantBuffer:
+		return vk::DescriptorType::eUniformBuffer;
 	}
 }
 
-vk::ShaderStageFlagBits map_slang_stage_to_vk(SlangStage stage) {
+inline vk::ShaderStageFlagBits map_shader_stage(SlangStage stage) {
 	switch (stage) {
-	case SLANG_STAGE_COMPUTE: return vk::ShaderStageFlagBits::eCompute;
 	default:
-		assert(!"Unexepcted shader stage");
+		assert(false && "unsupported shader stage");
+		return static_cast<vk::ShaderStageFlagBits>(-1);
+	case SLANG_STAGE_COMPUTE:
+		return vk::ShaderStageFlagBits::eCompute;
+	case SLANG_STAGE_VERTEX:
+		return vk::ShaderStageFlagBits::eVertex;
+	case SLANG_STAGE_FRAGMENT:
+		return vk::ShaderStageFlagBits::eFragment;
 	}
 }
 
-class pipeline_layout_builder {
-public:
-	std::vector<vk::DescriptorSetLayout>	descriptor_set_layouts;
-	std::vector<vk::PushConstantRange>		push_constant_ranges;
-	std::reference_wrapper<vulkan_core>		vulkan_core_;
+struct binding_offset {
+	// An offset in GLSL/SPIR-V "bindings"
+	uint32_t binding = 0;
 
-	pipeline_layout_builder(std::reference_wrapper<vulkan_core> vulkan_core) :
-		vulkan_core_(vulkan_core) {
+	// The descriptor set that the binding field indexes into
+	uint32_t binding_set = 0;
+
+	uint32_t push_constant_range_offset = 0;
+
+	binding_offset() {}
+
+	binding_offset(slang::VariableLayoutReflection* variable_layout) {
+		binding_set					= static_cast<uint32_t>(variable_layout->getBindingSpace(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT));
+		binding						= static_cast<uint32_t>(variable_layout->getOffset(SLANG_PARAMETER_CATEGORY_DESCRIPTOR_TABLE_SLOT));
+		push_constant_range_offset	= static_cast<uint32_t>(variable_layout->getOffset(SLANG_PARAMETER_CATEGORY_PUSH_CONSTANT_BUFFER));
 	}
 
-	class descriptor_set_layout_builder {
-	public:
-		std::vector<vk::DescriptorSetLayoutBinding>		descriptor_binding_ranges;
-		std::reference_wrapper<pipeline_layout_builder> pipeline_layout_builder_;
-		std::reference_wrapper<vulkan_core>				vulkan_core_;
-		uint32_t										set_index;
+	void operator+=(binding_offset const& offset) {
+		binding += offset.binding;
+		binding_set += offset.binding_set;
+		push_constant_range_offset += offset.push_constant_range_offset;
+	}
+};
 
-		descriptor_set_layout_builder(
-			vulkan_core& vulkan_core,
-			pipeline_layout_builder& pipeline_layout_builder
-		)
-			: vulkan_core_(vulkan_core), pipeline_layout_builder_(pipeline_layout_builder) {
-			set_index = pipeline_layout_builder.descriptor_set_layouts.size();
-			pipeline_layout_builder.descriptor_set_layouts.push_back(VK_NULL_HANDLE);
-		}
+struct binding_range_info {
+	slang::BindingType binding_type;
+	uint32_t count;
+	uint32_t base_index;
 
-		void add_automatically_introduced_uniforbuffer() {
-			auto vulkan_binding_index = descriptor_binding_ranges.size();
+	// An index into the sub-object array if this binding range is treated as a sub-object
+	uint32_t sub_object_index;
 
-			descriptor_binding_ranges.emplace_back(
-				vk::DescriptorSetLayoutBinding()
-				.setStageFlags(vk::ShaderStageFlagBits::eAll)
-				.setBinding(vulkan_binding_index)
-				.setDescriptorCount(1)
-				.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			);
-		}
+	// The "binding" offset to apply for this range
+	uint32_t binding_offset;
 
-		// In the common case, each of the range that is reflected by Slang translate to one range in the Vulkan descriptor set
-		void add_descriptor_range(
-			slang::TypeLayoutReflection* type_layout,
-			uint32_t relative_set_index,
-			uint32_t range_index,
-			vk::ShaderStageFlagBits shader_stage
-		) {
-			slang::BindingType	binding_type = type_layout->getDescriptorSetDescriptorRangeType(relative_set_index, range_index);
-			uint32_t			descriptor_count = type_layout->getDescriptorSetDescriptorRangeDescriptorCount(relative_set_index, range_index);
-			uint32_t			binding_index = descriptor_binding_ranges.size();
+	bool is_specialisable;
+};
 
+struct descriptor_set_info {
+	std::vector<vk::DescriptorSetLayoutBinding>			bindings;
+	vk::DescriptorSetLayout								descriptor_set_layout;
+};
 
-			switch (binding_type) {
-				// We account for push-constants elsewhere
-			case slang::BindingType::PushConstant:
-				return;
+struct entry_point_shader_layout {
+	std::string											name;
+	std::vector<vk::PushConstantRange>					push_constant_ranges;
+	std::vector<descriptor_set_info>					descriptor_set_infos;
+	vk::ShaderStageFlagBits								shader_stage;
+	binding_offset										offset;
+};
+
+struct global_shader_layout {
+	std::vector<vk::PushConstantRange>					push_constant_ranges;
+	std::vector<descriptor_set_info>					descriptor_set_infos;
+};
+
+struct root_shader_object_layout {
+	global_shader_layout				   global;
+	std::vector<entry_point_shader_layout> entry_points;
+
+	[[nodiscard]]
+	auto entry_point_descriptor_sets(uint32_t index) {
+		return ranges::concat_view(global.descriptor_set_infos, entry_points[index].descriptor_set_infos) | std::views::transform(&descriptor_set_info::descriptor_set_layout);
+	}
+
+	[[nodiscard]]
+	auto& entry_push_constants(uint32_t index) {
+		return entry_points[index].push_constant_ranges;
+	}
+};
+
+struct shader_layout_builder_base {
+public:
+	// Add any descriptor ranges implied by this object containing a leaf sub-object described by 'type_layout', at the given 'offset'
+	void add_descriptor_ranges_as_value(
+		slang::TypeLayoutReflection* type_layout,
+		const binding_offset& offset
+	) {
+		// First we will scan through all the descriptor sets that the Slang reflection
+		// information believes go into making up the given type.
+
+		uint32_t binding_range_count = type_layout->getBindingRangeCount();
+		for (uint32_t binding_range_idx = 0; binding_range_idx < binding_range_count; ++binding_range_idx) {
+			auto binding_range_type = type_layout->getBindingRangeType(binding_range_idx);
+			switch (binding_range_type) {
 			default:
 				break;
-			}
 
-			descriptor_binding_ranges.emplace_back(
-				vk::DescriptorSetLayoutBinding()
-				.setDescriptorCount(descriptor_count)
-				.setDescriptorType(map_slang_binding_type_to_vk(binding_type))
-				.setStageFlags(shader_stage)
-			);
-		}
-
-		void add_descriptor_ranges(
-			slang::TypeLayoutReflection* type_layout,
-			vk::ShaderStageFlagBits shader_stage
-		) {
-			uint32_t relative_set_index = 0;
-			uint32_t range_count = type_layout->getDescriptorSetDescriptorRangeCount(relative_set_index);
-
-			for (uint32_t range_index = 0; range_index < range_count; ++range_index) {
-				add_descriptor_range(type_layout, relative_set_index, range_index, shader_stage);
-			}
-		}
-
-		void add_entry_point_parameters(slang::EntryPointLayout* entry_point_layout) {
-			add_descriptor_ranges_for_parameter_block_element(
-				entry_point_layout->getTypeLayout(),
-				map_slang_stage_to_vk(entry_point_layout->getStage())
-			);
-		}
-
-		void add_entry_point_parameters(
-			slang::ProgramLayout* program_layout
-		) {
-			uint32_t entry_point_count = program_layout->getEntryPointCount();
-			for (uint32_t entry_point_idx = 0; entry_point_idx < entry_point_count; ++entry_point_idx)
-				add_entry_point_parameters(program_layout->getEntryPointByIndex(entry_point_idx));
-		}
-
-		void finish_building(
-			pipeline_layout_builder& pipeline_layout_builder
-		) {
-			if (descriptor_binding_ranges.empty()) return;
-
-			auto descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo()
-				.setBindings(descriptor_binding_ranges);
-
-			pipeline_layout_builder.descriptor_set_layouts[set_index] =
-				vulkan_core_
-				.get()
-				.device()
-				.createDescriptorSetLayout(descriptor_set_layout_create_info);
-		}
-
-		void add_descriptor_ranges_for_parameter_block_element(
-			slang::TypeLayoutReflection* element_type_layout,
-			vk::ShaderStageFlagBits shader_stage
-		) {
-			// If the element type of the parameter block (the Thing in ParameterBlock<Thing>) has any amount of ordinary data in it,
-			// the Slang compiler automatically introduces a uniform buffer to pass that data. 
-			// The automatically-introduced uniform buffer will only be present if it was needed (that is, when the element type has a non-zero size in bytes),
-			// and it will always precede any other bindings for the parameter block.
-			// https://shader-slang.org/docs/parameter-blocks/
-			if (element_type_layout->getSize() > 0) add_automatically_introduced_uniforbuffer();
-
-			add_descriptor_ranges(element_type_layout, shader_stage);
-			pipeline_layout_builder_.get().add_sub_object_ranges(element_type_layout, shader_stage);
-		}
-	};
-
-	void add_push_constant_range_for_constant_buffer(slang::TypeLayoutReflection* constant_buffer_type_layout, vk::ShaderStageFlagBits shader_stage) {
-		slang::TypeLayoutReflection* element_type_layout = constant_buffer_type_layout->getElementTypeLayout();
-		uint32_t element_size = element_type_layout->getSize();
-
-		if (element_size == 0) return;
-
-		push_constant_ranges.emplace_back(
-			vk::PushConstantRange()
-			.setStageFlags(shader_stage)
-			.setOffset(0)
-			.setSize(element_size)
-		);
-	}
-
-	void add_sub_object_range(slang::TypeLayoutReflection* type_layout, uint32_t sub_object_range_index, vk::ShaderStageFlagBits shader_stage) {
-		auto binding_range_idx = type_layout->getSubObjectRangeBindingRangeIndex(sub_object_range_index);
-		slang::BindingType binding_type = type_layout->getBindingRangeType(binding_range_idx);
-
-		switch (binding_type) {
-		case slang::BindingType::ParameterBlock: {
-			add_descriptor_set_parameter_block(type_layout->getBindingRangeLeafTypeLayout(binding_range_idx), shader_stage);
-			break;
-		}
-		case slang::BindingType::PushConstant: {
-			add_push_constant_range_for_constant_buffer(type_layout->getBindingRangeLeafTypeLayout(binding_range_idx), shader_stage);
-			break;
-		}
-		default:
-			return;
-		}
-	}
-
-	void add_descriptor_set_parameter_block(
-		slang::TypeLayoutReflection* parameter_block_type_layout,
-		vk::ShaderStageFlagBits shader_stage
-	) {
-		descriptor_set_layout_builder descriptor_set_builder(vulkan_core_, *this);
-		descriptor_set_builder.add_descriptor_ranges_for_parameter_block_element(parameter_block_type_layout->getElementTypeLayout(), shader_stage);
-	}
-
-	void add_sub_object_ranges(slang::TypeLayoutReflection* type_layout, vk::ShaderStageFlagBits shader_stage) {
-		uint32_t sub_object_range_count = type_layout->getSubObjectRangeCount();
-
-		for (uint32_t sub_object_range_idx = 0; sub_object_range_idx < sub_object_range_count; ++sub_object_range_idx)
-			add_sub_object_range(type_layout, sub_object_range_idx, shader_stage);
-	}
-
-	void filter_out_empty_descriptor_set_layouts() {
-		std::vector<vk::DescriptorSetLayout> filtered_descriptor_sets;
-		for (auto& descriptor_set_layout : descriptor_set_layouts) {
-			if (!descriptor_set_layout)
+				// Skip over ranges that represent sub-objects, and handle them in a separate pass.
+			case slang::BindingType::ParameterBlock:
+				[[fallthrough]];
+			case slang::BindingType::ConstantBuffer:
+				[[fallthrough]];
+			case slang::BindingType::ExistentialValue:
+				[[fallthrough]];
+			case slang::BindingType::PushConstant:
 				continue;
-			filtered_descriptor_sets.push_back(descriptor_set_layout);
+			}
+
+			// For a binding range we're interested in, enumerate over its contained descriptor ranges
+			uint32_t descriptor_range_count = type_layout->getDescriptorSetDescriptorRangeCount(binding_range_idx);
+			if (descriptor_range_count == 0)
+				continue;
+
+			uint32_t slang_descriptor_set_index = type_layout->getBindingRangeDescriptorSetIndex(binding_range_idx);
+			std::vector<vk::DescriptorSetLayoutBinding>& descriptor_set_bindings = find_or_add_descriptor_set(offset.binding_set + type_layout->getDescriptorSetSpaceOffset(slang_descriptor_set_index));
+
+			uint32_t first_descriptor_range_index = type_layout->getBindingRangeFirstDescriptorRangeIndex(binding_range_idx);
+			for (uint32_t descriptor_range_index = first_descriptor_range_index; descriptor_range_index < first_descriptor_range_index + descriptor_range_count; ++descriptor_range_index) {
+				auto slang_descriptor_type = type_layout->getDescriptorSetDescriptorRangeType(slang_descriptor_set_index, descriptor_range_index);
+
+				// Certain kinds of descriptor ranges reflected by Slang do not
+				// manifest as descriptors at the Vulkan level, so we will skip those
+				switch (slang_descriptor_type) {
+				case slang::BindingType::ParameterBlock:
+					[[fallthrough]];
+				case slang::BindingType::ConstantBuffer:
+					[[fallthrough]];
+				case slang::BindingType::ExistentialValue:
+					continue;
+				default:
+					break;
+				}
+
+				auto vk_descriptor_type = map_descriptor_type(slang_descriptor_type);
+
+				auto vk_binding_range_desc = vk::DescriptorSetLayoutBinding()
+					.setBinding(type_layout->getDescriptorSetDescriptorRangeIndexOffset(slang_descriptor_set_index, descriptor_range_index))
+					.setDescriptorCount(descriptor_range_count)
+					.setDescriptorType(vk_descriptor_type)
+					.setStageFlags(vk::ShaderStageFlagBits::eAll);
+
+				descriptor_set_bindings.push_back(vk_binding_range_desc);
+			}
 		}
-		std::swap(descriptor_set_layouts, filtered_descriptor_sets);
+
+		// Now iterate over the sub-objects
+		uint32_t sub_object_count = type_layout->getSubObjectRangeCount();
+		for (uint32_t sub_object_range_index = 0; sub_object_range_index < sub_object_count; ++sub_object_range_index) {
+			uint32_t binding_range_index = type_layout->getSubObjectRangeBindingRangeIndex(sub_object_range_index);
+
+			auto binding_type = type_layout->getBindingRangeType(binding_range_index);
+			auto sub_object_type_layout = type_layout->getBindingRangeLeafTypeLayout(binding_range_index);
+
+			binding_offset sub_object_binding_offset = offset;
+			sub_object_binding_offset += binding_offset(type_layout->getSubObjectRangeOffset(sub_object_range_index));
+
+			switch (binding_type) {
+			case slang::BindingType::ParameterBlock:
+				// A ParameterBlock<X> never contributes descriptor ranges to the descriptor sets of the parent object
+			default:
+				break;
+			case slang::BindingType::ExistentialValue:
+				assert(false && "unsupported slang binding type");
+				break;
+			case slang::BindingType::ConstantBuffer: {
+				auto container_var_layout = sub_object_type_layout->getContainerVarLayout();
+				assert(container_var_layout != nullptr);
+
+				auto element_var_layout = sub_object_type_layout->getElementVarLayout();
+				assert(element_var_layout != nullptr);
+
+				auto element_type_layout = element_var_layout->getTypeLayout();
+				assert(element_type_layout != nullptr);
+
+				binding_offset container_offset = sub_object_binding_offset;
+				container_offset += binding_offset(container_var_layout);
+
+				binding_offset element_offset = sub_object_binding_offset;
+				element_offset += binding_offset(element_var_layout);
+				add_descriptor_ranges_as_constant_buffer(element_type_layout, container_offset, element_offset);
+			}
+				break;
+			case slang::BindingType::PushConstant: {
+				auto container_var_layout = sub_object_type_layout->getContainerVarLayout();
+				assert(container_var_layout != nullptr);
+
+				auto element_var_layout = sub_object_type_layout->getElementVarLayout();
+				assert(element_var_layout != nullptr);
+
+				auto element_type_layout = element_var_layout->getTypeLayout();
+				assert(element_type_layout != nullptr);
+
+				binding_offset container_offset = sub_object_binding_offset;
+				container_offset += binding_offset(container_var_layout);
+
+				binding_offset element_offset = sub_object_binding_offset;
+				element_offset += binding_offset(element_var_layout);
+				add_descriptor_ranges_as_push_constant_buffer(element_type_layout, container_offset, element_offset);
+			}
+				break;
+			}
+		}
 	}
 
-	vk::PipelineLayout finish_building() {
-		filter_out_empty_descriptor_set_layouts();
+	// Add the descriptor ranges defined by a 'ConstantBuffer<X>' where X is defined by 'element_type_layout'
+	// The 'container_offset' and 'element_offset' are the binding offsets that should apply to the buffer itself and the contents of the buffer, respectively
+	void add_descriptor_ranges_as_constant_buffer(
+		slang::TypeLayoutReflection* element_type_layout,
+		const binding_offset& container_offset,
+		const binding_offset& element_offset
+	) {
+		// If the type has ordinary uniform data fields, we need to make sure to create
+		// a descriptor set with a constant buffer binding in the case that the shader
+		// object is bound as a stand alone parameter block
+		if (element_type_layout->getSize(SLANG_PARAMETER_CATEGORY_UNIFORM) != 0) {
+			auto& descriptor_set = find_or_add_descriptor_set(container_offset.binding_set);
+			descriptor_set.emplace_back(
+				vk::DescriptorSetLayoutBinding()
+				.setBinding(container_offset.binding)
+				.setDescriptorCount(1)
+				.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+				.setStageFlags(vk::ShaderStageFlagBits::eAll)
+			);
+		}
 
-		return vulkan_core_.get().device().createPipelineLayout(
-			vk::PipelineLayoutCreateInfo()
-			.setSetLayouts(descriptor_set_layouts)
-			.setPushConstantRanges(push_constant_ranges)
-		);
+		add_descriptor_ranges_as_value(element_type_layout, element_offset);
 	}
+
+	// Add the descriptor ranges implied by a 'PushConstantBuffer<X>' where 'X' is described by element_type_layout
+	// The `container_offset` and `element_offset` are the binding offsets that should apply to the buffer itself and the contents of the buffer, respectively.
+	void add_descriptor_ranges_as_push_constant_buffer(
+		slang::TypeLayoutReflection* element_type_layout,
+		const binding_offset& container_offset,
+		const binding_offset& element_offset
+	) {
+		// If the type has ordinary uniform data fields, we need to make sure to create
+		// a descriptor set with a constant buffer binding in the case that the shader
+		// object is bound as a stand alone parameter block.
+		auto ordinary_data_size = element_type_layout->getSize(SLANG_PARAMETER_CATEGORY_UNIFORM);
+		if (ordinary_data_size != 0) {
+			uint32_t push_constant_range_index = container_offset.push_constant_range_offset;
+
+			while (push_constant_ranges_.size() < push_constant_range_index)
+				push_constant_ranges_.emplace_back(vk::PushConstantRange());
+
+			push_constant_ranges_.emplace_back(vk::PushConstantRange()
+				.setSize(ordinary_data_size)
+				.setStageFlags(vk::ShaderStageFlagBits::eAll) // TODO: Be more clever
+			);
+		}
+
+		add_descriptor_ranges_as_value(element_type_layout, element_offset);
+	}
+
+	std::vector<vk::DescriptorSetLayoutBinding>& find_or_add_descriptor_set(uint32_t descriptor_set_index) {
+		return descriptor_set_bindings_[descriptor_set_index];
+	}
+
+	std::map<uint32_t, std::vector<vk::DescriptorSetLayoutBinding>>				descriptor_set_bindings_;
+	std::vector<vk::PushConstantRange>											push_constant_ranges_;
 };
 
-struct entry_point_layout {
-	std::string name;
-	vk::PipelineLayout pipeline_layout;
-	std::vector<vk::PushConstantRange> push_constant_ranges;
-};
+struct entry_point_layout_builder : shader_layout_builder_base {
+	entry_point_layout_builder(slang::EntryPointLayout* entry_point_layout)
+		: 
+		offset_(entry_point_layout->getVarLayout()),
+		entry_point_layout_(entry_point_layout), 
+		name_(entry_point_layout->getName()),
+		shader_stage_(map_shader_stage(entry_point_layout->getStage())) {
+		add_descriptor_ranges_as_value(entry_point_layout->getTypeLayout(), offset_);
+	}
 
-struct shader_layout {
-	std::vector<entry_point_layout> entry_point_layouts;
-};
-
-
-shader_layout create_pipeline_layout(slang::ProgramLayout* program_layout, std::reference_wrapper<vulkan_core> vulkan_core) {
-	pipeline_layout_builder pipeline_layout_builder_(vulkan_core);
-	pipeline_layout_builder::descriptor_set_layout_builder descriptor_set_layout_builder(vulkan_core, pipeline_layout_builder_);
-
-	auto entry_point_layouts =
-		std::views::iota(0u, program_layout->getEntryPointCount())
-		| std::views::transform([&](auto idx) {
-			auto* entry_point = program_layout->getEntryPointByIndex(idx);
-			pipeline_layout_builder pipeline_builder(vulkan_core);
-			pipeline_layout_builder::descriptor_set_layout_builder descriptor_set_layout_builder(vulkan_core, pipeline_builder);
-
-			descriptor_set_layout_builder.add_entry_point_parameters(entry_point);
-			descriptor_set_layout_builder.finish_building(pipeline_builder);
-			vk::PipelineLayout pipeline_layout = pipeline_builder.finish_building();
-			return entry_point_layout{ 
-				.name = entry_point->getName(),
-				.pipeline_layout = pipeline_layout,
-				.push_constant_ranges = pipeline_builder.push_constant_ranges
+	[[nodiscard]]
+	entry_point_shader_layout build(vulkan_core& core) {
+		auto descriptor_sets = descriptor_set_bindings_ | std::views::transform([&](auto const& bindings) {
+			return descriptor_set_info {
+				.bindings = bindings.second,
+				.descriptor_set_layout = core.device().createDescriptorSetLayout(
+					vk::DescriptorSetLayoutCreateInfo()
+						.setBindings(bindings.second)
+						.setFlags(vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor)
+				)
 			};
 		});
 
-	descriptor_set_layout_builder.add_entry_point_parameters(program_layout);
-	descriptor_set_layout_builder.finish_building(pipeline_layout_builder_);
-	vk::PipelineLayout pipeline_layout = pipeline_layout_builder_.finish_building();
+		return entry_point_shader_layout {
+			.name					= name_,
+			.push_constant_ranges	= push_constant_ranges_,
+			.descriptor_set_infos	= descriptor_sets | std::ranges::to<std::vector<descriptor_set_info>>(),
+			.shader_stage			= shader_stage_,
+			.offset					= offset_
+		};
+	}
 
-	return shader_layout {
-		.entry_point_layouts = entry_point_layouts | std::ranges::to<std::vector>()
-	};
-}
+	slang::EntryPointLayout*				entry_point_layout_;
+	std::string								name_;
+	vk::ShaderStageFlagBits					shader_stage_;
+	binding_offset							offset_;
+};
+
+struct root_shader_layout_builder {
+	global_shader_layout global_layout_;
+	std::vector<entry_point_shader_layout> entry_points_;
+
+	void add_global_params(slang::VariableLayoutReflection* globals_layout, vulkan_core& core) {
+		shader_layout_builder_base builder;
+		binding_offset global_offset(globals_layout);
+		builder.add_descriptor_ranges_as_value(globals_layout->getTypeLayout(), global_offset);
+
+		auto descriptor_sets = builder.descriptor_set_bindings_ | std::views::transform([&](auto const& bindings) {
+			return descriptor_set_info {
+				.bindings = bindings.second,
+				.descriptor_set_layout = core.device().createDescriptorSetLayout(
+					vk::DescriptorSetLayoutCreateInfo()
+						.setBindings(bindings.second)
+						.setFlags(vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor)
+				)
+			};
+		});
+
+		global_layout_ = global_shader_layout {
+			.push_constant_ranges = builder.push_constant_ranges_,
+			.descriptor_set_infos = descriptor_sets | std::ranges::to<std::vector<descriptor_set_info>>(),
+		};
+	}
+
+	void add_entry_point(slang::EntryPointLayout* entry_point_layout, vulkan_core& core) {
+		entry_point_layout_builder builder(entry_point_layout);
+		entry_points_.emplace_back(builder.build(core));
+	}
+
+	[[nodiscard]]
+	root_shader_object_layout build() const {
+		return root_shader_object_layout {
+			.global = global_layout_,
+			.entry_points = entry_points_
+		};
+	}
+};
+
 }
