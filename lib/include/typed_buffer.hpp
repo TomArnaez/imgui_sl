@@ -75,7 +75,7 @@ template<
     uint32_t        dims = 1,
     access_policy   policy = access_policy::device,
     buffer_kind     kind = buffer_kind::storage>
-class typed_buffer : private device_address_holder<device_addressable<kind>> {
+class typed_buffer {
 public:
     typed_buffer(std::reference_wrapper<allocator> alloc,
         const vulkan_core& core,
@@ -153,12 +153,13 @@ public:
         return std::ranges::subrange(mapping(), mapping() + element_count_);
     }
 private:
-    using addr_base = device_address_holder<device_addressable<kind>>;
-    std::reference_wrapper<allocator>   allocator_;
-    [[no_unique_address]] addr_base     address_;
-    buffer                              buffer_;
-    std::array<uint32_t, dims>          shape_;
-    uint32_t                            element_count_{};
+    std::reference_wrapper<allocator>               allocator_;
+    buffer                                          buffer_;
+    std::array<uint32_t, dims>                      shape_;
+    uint32_t                                        element_count_{};
+
+    [[no_unique_address]]
+    device_address_holder<device_addressable<kind>> address_;
 };
 
 template<typename T, uint32_t dims>

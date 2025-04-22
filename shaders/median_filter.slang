@@ -58,9 +58,6 @@ void median_filter(
     int32_t base_x = group_id.x * MEDIAN_FILTER_WORKGROUP_SIZE_X - RADIUS;
     int32_t base_y = group_id.y * MEDIAN_FILTER_WORKGROUP_SIZE_Y - RADIUS;
 
-    if (global_id.x == 0 && global_id.y == 0)
-        printf("Test hi");
-
     // We need to fill shared_tile
     // We can do that by letting each thread load multiple pixels in steps of the workgroup size
     for (uint load_x = group_thread_id.x; load_x < MEDIAN_FILTER_WORKGROUP_SIZE_X + (KERNEL_SIZE - 1); load_x += MEDIAN_FILTER_WORKGROUP_SIZE_X) {

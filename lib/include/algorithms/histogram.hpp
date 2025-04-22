@@ -8,6 +8,11 @@ namespace vkengine {
 
 constexpr uint32_t HISTOGRAM_WORKGROUP_SIZE_X = 128;
 
+struct histogram_push_constants {
+	device_span input;
+	device_span histogram;
+};
+
 class histogram_operator {
 public:
 	histogram_operator(shader_manager& shader_manager) {
@@ -18,7 +23,7 @@ public:
 			), "workgroup_module");
 
 		histogram_shader_program_ = shader_manager.load_shader(
-			"histogram",
+			std::string(VKENGINE_SHADER_DIR) + "/histogram.slang",
 			{ shader_manager::entry_point_compile_info {.name = "histogram" } },
 			{ workgroup_module }
 		);
@@ -30,54 +35,24 @@ public:
 		typed_buffer<uint16_t, 2, policy>& input,
 		typed_buffer<uint32_t, 1, policy>& output_histogram
 	) {
+		std::array<uint32_t, 3>	dispatch_counts = { (input.size() + workgroup_sizes[0] - 1) / workgroup_sizes[0], 1, 1 };
 
+		histogram_push_constants histogram_push_constants = {
+			.input = input.device_span(),
+			.histogram = output_histogram.device_span()
+		};
+
+		dispatch_shader(
+			cmd_buffer,
+			histogram_shader_program_.entry_points[0],
+			dispatch_counts,
+			vk::ShaderStageFlagBits::eCompute,
+			histogram_push_constants
+		);
 	}
 private:
-	shader_program histogram_shader_program_;
+	static constexpr std::array<uint32_t, 3>	workgroup_sizes = { 512, 1, 1 };
+	shader_program								histogram_shader_program_;
 };
-
-template<access_policy policy>
-void record_histogram(
-	typed_buffer<uint16_t, 2, policy>& input,
-	typed_buffer<uint32_t, 1, policy>& output_histogram
-) {
-
-}
-
-
-
-void calculate_histogram(
-	typed_buffer<uint16_t>& input,
-	typed_buffer<uint32_t>& histogram,
-	shader_manager& shader_manager,
-	vk::CommandBuffer cmd_buffer
-) {
-	constexpr std::array<uint32_t, 3>	workgroup_sizes = { 512, 1, 1 };
-	std::array<uint32_t, 3>				dispatch_counts = { (input.size() + workgroup_sizes[0] - 1) / workgroup_sizes[0], 1, 1 };
-
-	//auto histogram_shader = shader_manager.load_shader(
-	//	std::string(VKENGINE_SHADER_DIR) + "/histogram.slang",
-	//	{ "caculate_histogram" },
-	//	dispatch_counts
-	//)[0];
-
-	//struct histogram_push_constants {
-	//	device_span<uint16_t> input;
-	//	device_span<uint32_t> histogram;
-	//}; 
-
-	//histogram_push_constants histogram_push_constants = {
-	//	.input = input.device_span(),
-	//	.histogram = histogram.device_span()
-	//};
-
-	//dispatch_shader(
-	//	cmd_buffer,
-	//	histogram_shader,
-	//	dispatch_counts,
-	//	vk::ShaderStageFlagBits::eCompute,
-	//	histogram_push_constants
-	//);
-}
 
 } // namespace vkengine

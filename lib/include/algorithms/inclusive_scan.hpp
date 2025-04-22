@@ -9,6 +9,12 @@ namespace vkengine {
 
 constexpr uint32_t INCLUSIVE_SCAN_WORKGROUP_SIZE = 128;
 
+struct inclusive_span_push_constants {
+	device_span input;
+	device_span output;
+	device_span group_sums;
+};
+
 template<uint32_t dims, access_policy policy>
 void inclusive_scan(
 	typed_buffer<uint32_t, dims, policy>& input,
@@ -50,12 +56,6 @@ void inclusive_scan(
 		{ workgroup_module }
 	);
 
-	struct inclusive_span_push_constants {
-		device_span input;
-		device_span output;
-		device_span group_sums;
-	};
-
 	inclusive_span_push_constants scan_push_constants = {
 		.input = input,
 		.output = output,
@@ -77,7 +77,6 @@ void inclusive_scan(
 		.setDstAccessMask(vk::AccessFlagBits2::eShaderRead)
 		.setBuffer(group_sums.vk_handle())
 		.setSize(VK_WHOLE_SIZE);
-
 
 	cmd_buffer.pipelineBarrier2(vk::DependencyInfo().setBufferMemoryBarriers(inclusive_scan_barrier));
 
