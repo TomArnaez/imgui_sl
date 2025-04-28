@@ -6,6 +6,7 @@
 #include <algorithms/normalise.hpp>
 #include <algorithms/median_filter.hpp>
 #include <typed_buffer.hpp>
+#include <graph.hpp>
 #include <gpu.hpp>
 #include <ranges>
 #include <iostream>
