@@ -11,6 +11,8 @@
 #include <ranges>
 #include <iostream>
 
+#include <vulkan/vulkan_to_string.hpp>
+
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace {
@@ -32,6 +34,69 @@ struct vk_state {
     vkengine::allocator allocator;
     vkengine::shader_manager shader_manager;
 };
+
+
+struct writer_op {
+    vk::Buffer                              buf;
+    vkengine::buffer_usage                  use;
+
+    explicit writer_op(vk::Buffer b)
+        : buf{ b },
+        use{ vkengine::buffer_usage{
+                  b,
+                  vk::AccessFlagBits2::eShaderWrite,
+                  vk::PipelineStageFlagBits2::eComputeShader } } {
+    }
+
+    auto usages() const { return std::views::single(use); }
+    void record(vk::CommandBuffer cb) const {
+    }
+};
+
+struct reader_op {
+    vk::Buffer                              buf;
+    vkengine::buffer_usage                  use;
+
+    explicit reader_op(vk::Buffer b)
+        : buf{ b },
+        use{ vkengine::buffer_usage{
+                  b,
+                  vk::AccessFlagBits2::eShaderRead,
+                  vk::PipelineStageFlagBits2::eComputeShader } } {
+    }
+
+    auto usages() const { return std::views::single(use); }
+
+    void record(vk::CommandBuffer cb) const {
+    }
+};
+
+void test_graph(vk_state& state) {
+    using test_node = vkengine::op_variant<writer_op, reader_op>;
+
+    vkengine::host_visible_buffer<uint32_t> buffer_a(
+        state.allocator,
+        state.core,
+        1024
+    );
+
+    std::vector<test_node> nodes;
+    nodes.emplace_back(reader_op{ buffer_a.vk_handle() });
+    nodes.emplace_back(writer_op{ buffer_a.vk_handle() });
+
+    vkengine::compiled_graph graph = vkengine::compile(nodes);
+
+    for (auto& step : graph.steps) {
+        auto& barriers = step.buffer_memory_barriers;
+
+        for (auto& barrier : barriers) {
+            std::cout << "srcAccessMask:\t" << vk::to_string(barrier.srcAccessMask) << std::endl;
+            std::cout << "dstAccessMask:\t" << vk::to_string(barrier.dstAccessMask) << std::endl;
+            std::cout << "srcStageMask:\t"  << vk::to_string(barrier.srcStageMask) << std::endl;
+            std::cout << "dstStageMask:\t"  << vk::to_string(barrier.dstStageMask) << std::endl;
+        }
+    }
+}
 
 void test_normalisation(vk_state& state) {
     uint32_t element_count = 1024;
@@ -241,7 +306,8 @@ int main() {
     }
 
     vk_state state(instance, gpus[0], device_extensions);
-    test_median_filter(state);
+    //test_median_filter(state);
     //test_inclusive_scan(state);
 	//test_normalisation(state);
+    test_graph(state);
 }
