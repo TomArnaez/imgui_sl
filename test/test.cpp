@@ -84,7 +84,7 @@ void test_graph(vk_state& state) {
     nodes.emplace_back(reader_op{ buffer_a.vk_handle() });
     nodes.emplace_back(writer_op{ buffer_a.vk_handle() });
 
-    vkengine::compiled_graph graph = vkengine::compile(nodes);
+    vkengine::compiled_graph graph = vkengine::graph_builder{}.build(nodes).value();
 
     for (auto& step : graph.steps) {
         auto& barriers = step.buffer_memory_barriers;
