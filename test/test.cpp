@@ -10,6 +10,7 @@
 #include <gpu.hpp>
 #include <ranges>
 #include <iostream>
+#include <graph2.hpp>
 
 #include <vulkan/vulkan_to_string.hpp>
 
