@@ -17,7 +17,54 @@ struct node_state {
 };
 
 struct executable_graph_builder {
-  resource_manager &resource_manager;
+  resource_manager       &resource_manager_;
+  std::vector<node_state> node_states_;
+
+  executable_graph_builder(uint32_t          node_capacity,
+                           resource_manager &resource_manager)
+      : node_states_(node_capacity), resource_manager_(resource_manager) {}
+
+  void buffer_access(uint32_t buffer_id, node_index node_index,
+                     const resource_access &access) {
+    auto &node = node_states_[node_index];
+
+    auto &buffer_state = resource_manager_.buffer_unchecked(buffer_id);
+
+    // Queue ownership transfer required
+    if (access.queue_family_index != buffer_state.access.queue_family_index) {
+    }
+
+    if (access.contains_write()) {
+      if (buffer_state.access.contains_read()) {
+        // WAR hzards don't need availability or visible operations between them
+        // - execution dependencies are sufficient
+      }
+    }
+  }
+
+private:
+  void queue_family_ownership_release(node_index node_index, uint32_t buffer_id,
+                                      const resource_access &access) {
+    auto &buffer_state = resource_manager_.buffer_unchecked(buffer_id);
+
+    resource_access dst = {.stage_mask = {},
+                           .access_mask = {},
+                           .queue_family_index = access.queue_family_index};
+  }
+
+  void queue_family_ownership_acquire(node_index node_index, uint32_t buffer_id,
+                                      const resource_access &access) {
+    auto &buffer_state = resource_manager_.buffer_unchecked(buffer_id);
+
+    resource_access src = {.stage_mask = {},
+                           .access_mask = {},
+                           .queue_family_index = access.queue_family_index};
+  }
+
+  void memory_barrier(node_index node_idnex, uint32_t buffer_id,
+                      const resource_access &src, const resource_access &dst) {
+
+  }
 };
 
 std::expected<executable_task_graph, task_graph::compile_error>

@@ -11,39 +11,62 @@
 
 namespace vkengine {
 
-struct base_resource_state {
-  vk::PipelineStageFlags2 stage = {};
-  vk::AccessFlags2        access = {};
-  uint32_t                queue_family = vk::QueueFamilyIgnored;
+struct resource_access {
+  vk::PipelineStageFlags2 stage_mask = {};
+  vk::AccessFlags2        access_mask = {};
+  uint32_t                queue_family_index = vk::QueueFamilyIgnored;
+
+  bool contains_write() const noexcept {
+    constexpr auto w =
+        vk::AccessFlagBits2::eMemoryWrite | vk::AccessFlagBits2::eShaderWrite |
+        vk::AccessFlagBits2::eTransferWrite | vk::AccessFlagBits2::eHostWrite;
+    return static_cast<bool>(access_mask & w);
+  }
+
+  bool contains_read() const noexcept {
+    constexpr auto r =
+        vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eShaderRead |
+        vk::AccessFlagBits2::eTransferRead | vk::AccessFlagBits2::eHostRead;
+    return static_cast<bool>(access_mask & r);
+  }
 };
 
 struct buffer_state {
-  base_resource_state resource_state = {};
-  vk::Buffer          buffer = nullptr;
+  resource_access access = {};
+  vk::Buffer      buffer = nullptr;
 };
 
 struct image_state {
-  base_resource_state resource_state = {};
-  vk::ImageLayout     image_layout = vk::ImageLayout::eUndefined;
-  vk::Image           image = nullptr;
+  resource_access access = {};
+  vk::ImageLayout image_layout = vk::ImageLayout::eUndefined;
+  vk::Image       image = nullptr;
 };
 
 class resource_manager {
 public:
   resource_manager(vk::Device device) : device_(device) {}
 
+  [[nodiscard]]
   auto buffer(slot_map<buffer_state>::id id) const {
     return buffer_state_.get(id);
   }
 
+  [[nodiscard]]
+  decltype(auto) buffer_unchecked(this auto &&self, std::uint32_t index) {
+    return self.buffer_state_.get_unchecked(index);
+  }
+
+  [[nodiscard]]
   auto image(slot_map<image_state>::id id) const {
     return image_state_.get(id);
   }
 
+  [[nodiscard]]
   auto add_buffer(vk::Buffer buffer) {
     return buffer_state_.emplace(buffer_state{.buffer = buffer});
   }
 
+  [[nodiscard]]
   auto add_image(vk::Image image) {
     return image_state_.emplace(image_state{.image = image});
   }

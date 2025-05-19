@@ -15,11 +15,14 @@
  *  •  32-bit handle packs <index, generation> for stale-handle detection.
  *=======================================================================================*/
 template <typename T,
-          size_t IndexBits = 24,     //  2^24  ≅ 16.7 M live objects
-          size_t GenerationBits = 8> //  2^8   = 256 generations / slot
+          std::size_t IndexBits = 24,
+          std::size_t GenerationBits = 8,
+          std::size_t MaxCapacity = (std::size_t{1} << IndexBits)>
 class slot_map {
   static_assert(IndexBits + GenerationBits <= 32,
                 "slot_map: IndexBits + GenerationBits must be ≤ 32");
+  static_assert(MaxCapacity <= (1u << IndexBits),
+                "MaxCapacity does not fit into IndexBits");
   static_assert(std::is_nothrow_move_constructible_v<T>,
                 "slot_map: T must be nothrow-move-constructible so that vector "
                 "reallocation "
@@ -51,10 +54,10 @@ public:
   };
 
   enum class error : std::uint8_t {
-    payload_constructor_threw, // - thrown while constructing T
-    index_out_of_range,        // - handle.index() ≥ slots_.size()
-    slot_empty,                // - the slot is un-occupied
-    stale_handle               // - generation mismatch
+    index_out_of_range,
+    slot_empty,
+    stale_handle,
+    capacity_exhaused
   };
 
   slot_map() = default;
@@ -73,6 +76,9 @@ public:
     uint32_t idx;
 
     if (free_.empty()) {
+      if (live_ >= MaxCapacity)
+        return std::unexpected(error::capacity_exhaused);
+
       idx = static_cast<uint32_t>(slots_.size());
       slots_.push_back(slot{});
     } else {
@@ -81,16 +87,11 @@ public:
     }
 
     slot &s = slots_[idx];
+    new (&s.storage) T(std::forward<Args>(args)...);
 
-    try {
-      new (&s.storage) T(std::forward<Args>(args)...);
+    s.occupied = true;
+    ++live_;
 
-      s.occupied = true;
-      ++live_;
-    } catch (...) {
-      free_.push_back(idx); // roll-back
-      return std::unexpected(error::payload_constructor_threw);
-    }
     return id::make(idx, s.generation & generation_mask);
   }
 
