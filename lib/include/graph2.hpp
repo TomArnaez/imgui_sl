@@ -1,185 +1,235 @@
 #pragma once
 
-#include <vulkan/vulkan.hpp>
-#include <utility/slot_map.hpp>
-
-#include <expected>
+#include <detailed_exception.hpp>
+#include <unordered_map>
 #include <functional>
-#include <string_view>
-#include <set>
+#include <variant>
+#include <queue>
 
-struct base_resource_state {
-	vk::PipelineStageFlags2 stage = {};
-	vk::AccessFlags2		access = {};
-	uint32_t				queue_family = vk::QueueFamilyIgnored;
+namespace vkengine {
+
+struct queue_info {
+	vk::Queue			queue;
+	uint32_t			family;
+	vk::QueueFlagBits	capabilities;
 };
 
-struct buffer_state {
-	base_resource_state	resource_state = {};
-	vk::Buffer			buffer = nullptr;
+struct buffer_usage {
+	vk::Buffer				buffer;
+	vk::AccessFlags2		access;
+	vk::PipelineStageFlags2 stages;
+
+	bool is_write() const noexcept {
+		constexpr auto w =
+			vk::AccessFlagBits2::eMemoryWrite |
+			vk::AccessFlagBits2::eShaderWrite |
+			vk::AccessFlagBits2::eTransferWrite |
+			vk::AccessFlagBits2::eHostWrite;
+		return static_cast<bool>(access & w);
+	}
 };
 
-struct image_state {
-	base_resource_state	resource_state = {};
-	vk::ImageLayout		image_layout = vk::ImageLayout::eUndefined;
-	vk::Image			image = nullptr;
+template<typename Op>
+concept operation = requires(const Op& op, vk::CommandBuffer cb) {
+	{ op.usages() }		-> std::ranges::forward_range;
+	{ op.record(cb) }	-> std::same_as<void>;
 };
 
-class resource_manager {
+struct compiled_graph {
+	struct step {
+		std::vector<vk::BufferMemoryBarrier2>	buffer_memory_barriers;
+		std::function<void(vk::CommandBuffer)>	record;
+	};
+
+	std::vector<step> steps;
+};
+
+template<operation... ops>
+using op_variant = std::variant<ops...>;
+
+class graph_builder {
 public:
-	resource_manager(vk::Device device)
-		: device_(device) {
-	}
+	graph_builder() = default;
+	graph_builder(const graph_builder&) = delete;
+	graph_builder& operator=(const graph_builder&) = delete;
 
-	auto buffer(slot_map<buffer_state>::id id) const {
-		return buffer_state_.get(id);
-	}
+	enum class graph_err {
+		cycle_detected,
+		duplicate_resource,
+		unsupported_usage,
+		internal_bug,
+	};
 
-	auto image(slot_map<image_state>::id id) const {
-		return image_state_.get(id);
-	}
+	template<operation... Ops>
+	[[nodiscard]]
+	auto build(const std::vector<op_variant<Ops...>>& ops)
+		-> std::expected<compiled_graph, graph_err> {
+		nodes_.reserve(ops.size());
+		for (auto& v : ops) nodes_.emplace_back();
 
-	auto add_buffer(vk::Buffer buffer) {
-		return buffer_state_.emplace(buffer_state{
-			.buffer = buffer
-			});
-	}
+		std::size_t idx = 0;
+		for (auto& variant : ops) {
+			std::visit([&]<typename Op>(const Op& op) {
+				analyse_op(op, idx);
+			}, variant);
+			++idx;
+		}
 
-	auto add_image(vk::Image image) {
-		return image_state_.emplace(image_state{
-			.image = image
-			});
+		wire_barriers();
+
+		if (auto r = topo_order(); !r) return std::unexpected(r.error());
+		return emit_graph();
 	}
 
 private:
-	vk::Device				device_;
+	struct node {
+		std::vector<buffer_usage>				usages;
+		std::vector<vk::BufferMemoryBarrier2>	barriers;
+		std::vector<vk::BufferMemoryBarrier2>   pre_barriers;
+		std::vector<vk::BufferMemoryBarrier2>   post_barriers;
+		std::function<void(vk::CommandBuffer)>	record;
+		std::vector<std::size_t>				out_edges;
+		uint32_t								queue_family;
+	};
 
-	slot_map<buffer_state>	buffer_state_;
-	slot_map<image_state>	image_state_;
-};
+	struct last_use {
+		buffer_usage	usage;
+		size_t			node_idx;
+		uint32_t		queue_family;
+	};
 
-struct task_node;
-
-using node_index = uint32_t;
-
-struct task_node {
-	std::vector<image_state>							image_accesses;
-	std::vector<buffer_state>							buffer_accesses;
-	std::vector<node_index>								in_edges;
-	std::vector<node_index>								out_edges;
-	uint32_t											queue_family_index = 0;
-	std::move_only_function<void(vk::CommandBuffer)>	execute;
-};
-
-class task_graph {
-	using node_id = slot_map<task_node>::id;
-public:
-	[[nodiscard]]
-	std::expected<node_id, std::string>
-	add_node(task_node&& node) {
-		auto id = task_nodes_.emplace(std::forward<task_node>(node));
-		if (!id) return std::unexpected("internal slot_map error");
-		return id.value();
+	template<typename Op>
+	void analyse_op(const Op& op, std::size_t node_idx) {
+		auto& n = nodes_[node_idx];
+		n.record = [op](vk::CommandBuffer cb) { op.record(cb); };
+		std::ranges::copy(op.usages(), std::back_inserter(n.usages));
 	}
 
-    [[nodiscard]]
-    std::expected<node_id, std::string> 
-	remove_node(node_id id) {
+	void wire_barriers() {
+		for (size_t i = 0; i < nodes_.size(); ++i) {
+			auto& curr_node = nodes_[i];
 
-        /*–––– 1. look up the node we are about to delete ––––*/
-        auto node_exp = task_nodes_.get(id);
-        if (!node_exp) return std::unexpected("node not found");
+			for (const buffer_usage& curr : curr_node.usages) {
+				auto [it, first_time] = last_.try_emplace(
+					curr.buffer, last_use{ curr, i });
 
-        task_node& node = *node_exp.value();
+				if (first_time) continue;
 
-        /*–––– 2. detach us from every OUT edge ––––*/
-        for (node_index out_index : node.out_edges) {
-            auto out_exp = task_nodes_.get(node_id(out_index));
-            if (!out_exp)
-                return std::unexpected("dangling out-edge");
+				auto& prev_use = it->second;
 
-            std::erase(out_exp.value()->in_edges, out_index);
-        }
+				auto& [prev_usage, prev_node_idx, prev_queue_family] = it->second;
 
-        /*–––– 3. detach us from every IN edge ––––*/
-        for (node_index in_index : node.in_edges) {
-            auto in_exp = task_nodes_.get(node_id(in_index));
-            if (!in_exp) return std::unexpected("dangling in-edge");
+				const bool need_order		= prev_usage.is_write() || curr.is_write();
+				const bool queue_changed	= prev_queue_family != curr_node.queue_family;
 
-            std::erase(in_exp.value()->out_edges, in_index);
-        }
+				if (need_order && prev_node_idx != i) {
 
-        /*–––– 4. finally remove the node itself ––––*/
-        if (auto res = task_nodes_.remove(id); !res)
-            return std::unexpected("internal slot_map error");
+					if (queue_changed) {
+						// (a) split into release (prev) + acquire (curr)
+						prev_queue_family_release(prev_use, curr, curr_node.queue_family, i);
+					}
 
-        return id;
-    }
+					nodes_[i].barriers.emplace_back(
+						vk::BufferMemoryBarrier2{}
+						.setSrcStageMask(prev_usage.stages)
+						.setDstStageMask(curr.stages)
+						.setSrcAccessMask(prev_usage.access)
+						.setDstAccessMask(curr.access)
+						.setBuffer(curr.buffer)
+						.setOffset(0)
+						.setSize(VK_WHOLE_SIZE));
 
-	[[nodiscard]]
-	std::expected<std::monostate, std::string> 
-	add_edge(node_id from, node_id to) {
-		auto from_node_res = task_nodes_.get(from);
-		if (!from_node_res)
-			return std::unexpected("from node not found");
+					nodes_[prev_node_idx].out_edges.push_back(i);
+				}
 
-		auto to_node_res = task_nodes_.get(to);
-		if (!to_node_res)
-			return std::unexpected("to node not found");
+				prev_usage.access	|= curr.access;
+				prev_usage.stages	|= curr.stages;
+				prev_node_idx		= i;
+				prev_queue_family	= curr_node.queue_family;
+			}
+		}
+	}
 
-		// We won't check for cycles here, just duplicate edges
-		auto& from_out_edges = from_node_res.value()->out_edges;
-		if (std::ranges::find(from_out_edges, to.value) != from_out_edges.end())
-			return std::unexpected("edge already exists");
+	//------------------------------------------------------------------
+	//  helpers to push release / acquire barriers
+	//------------------------------------------------------------------
+
+	void prev_queue_family_release(const last_use& prev, const buffer_usage& curr, 
+		uint32_t dst_family, size_t dst_node_idx) {
+		auto& prev_node = nodes_[prev.node_idx];
+		prev_node.post_barriers.emplace_back(
+			vk::BufferMemoryBarrier2()
+			.setSrcStageMask(prev.usage.stages)
+			.setSrcAccessMask(prev.usage.access)
+			.setDstStageMask(vk::PipelineStageFlagBits2::eNone)
+			.setDstAccessMask(vk::AccessFlagBits2::eNone)
+			.setSrcQueueFamilyIndex(prev.queue_family)
+			.setDstQueueFamilyIndex(dst_family)
+			.setBuffer(curr.buffer)
+			.setOffset(0)
+			.setSize(VK_WHOLE_SIZE));
+
+		prev_node.out_edges.push_back(dst_node_idx);
+	}
+
+	void curr_family_acquire(const last_use& prev, const buffer_usage& curr,
+		uint32_t curr_family, node& curr_node) {
+		curr_node.pre_barriers.emplace_back(
+			vk::BufferMemoryBarrier2{}
+			.setSrcStageMask(vk::PipelineStageFlagBits2::eNone)
+			.setSrcAccessMask(vk::AccessFlagBits2::eNone)
+			.setDstStageMask(curr.stages)
+			.setDstAccessMask(curr.access)
+			.setSrcQueueFamilyIndex(prev.queue_family)
+			.setDstQueueFamilyIndex(curr_family)
+			.setBuffer(curr.buffer)
+			.setOffset(0)
+			.setSize(VK_WHOLE_SIZE));
+	}
+
+	auto topo_order() -> std::expected<void, graph_err> {
+		std::vector<size_t> indeg(nodes_.size(), 0);
+
+		for (const auto& n : nodes_)
+			for (auto v : n.out_edges) ++indeg[v];
+
+		std::vector<size_t> queue(std::from_range, std::views::iota(0uz, indeg.size()) | std::views::filter([&](auto i) { return indeg[i] == 0; }));
+		order_.reserve(nodes_.size());
+
+		while (!queue.empty()) {
+			auto u = queue.back();
+			queue.pop_back();
+			order_.push_back(u);
+			for (auto v : nodes_[u].out_edges)
+				if (--indeg[v] == 0) queue.push_back(v);
+		}
+
+		if (order_.size() != nodes_.size())
+			return std::unexpected(graph_err::cycle_detected);
 
 		return {};
 	}
 
-	[[nodiscard]]
-	std::expected<std::monostate, std::string> 
-	remove_edge(node_id from, node_id to) {
-		auto from_node_res = task_nodes_.get(from);
-		if (!from_node_res) return std::unexpected("from node not found");
+	auto emit_graph() -> compiled_graph
+	{
+		compiled_graph g;
+		g.steps.reserve(nodes_.size());
 
-		auto to_node_res = task_nodes_.get(to);
-		if (!to_node_res) return std::unexpected("to node not found");
+		for (auto idx : order_)
+			g.steps.emplace_back(compiled_graph::step {
+				.buffer_memory_barriers = std::move(nodes_[idx].barriers),
+				.record = std::move(nodes_[idx].record)
+			});
 
-		std::erase(from_node_res.value()->out_edges, to.value);
-		std::erase(to_node_res.value()->in_edges, from.value);
+		return g;
 	}
 
-	[[nodiscard]]
-	auto nodes() const {
-		return task_nodes_.values();
-	}
-
-	[[nodiscard]] 
-	size_t size() const noexcept {
-		return task_nodes_.size();
-	}
-
-private:
-    std::reference_wrapper<resource_manager> resource_manager_;
-    slot_map<task_node>                      task_nodes_;
+	std::unordered_map<
+		vk::Buffer, last_use,
+		std::hash<VkBuffer>,
+		std::equal_to<>>		last_;
+	std::vector<node>			nodes_;
+	std::vector<std::size_t>	order_;
 };
 
-// Kahn's algorihm for topological sorting: https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
-std::expected<std::vector<node_index>, std::string>
-compile_graph(task_graph& graph) {
-
-	std::vector<uint32_t> queue(std::from_range, graph.nodes()) | std::views::filter([&](auto& node) { return node->in_edges.empty(); });
-
-
-	while (!queue.empty()) {
-/*		auto u = queue.back();
-		queue.pop_back();
-		order.emplace_back((u)*/;
-		//for (auto v : graph.nodes()[u].out_edges)
-		//	if (--indeg[v] == 0) queue.push_back(v);
-	}
-
-	if (order.size() != graph.size())
-		return std::unexpected("Cycle detected");
-
-	return order;
 }

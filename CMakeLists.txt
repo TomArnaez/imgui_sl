@@ -6,7 +6,8 @@ add_subdirectory(test)
 add_library(vulkan_engine
     lib/src/shader_manager.cpp
     lib/src/allocator.cpp
-    lib/src/vulkan_core.cpp)
+    lib/src/vulkan_core.cpp
+    lib/src/graph.cpp)
 
 target_include_directories(vulkan_engine PUBLIC lib/include PRIVATE lib/src)
 

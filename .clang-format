@@ -1,0 +1,10 @@
+﻿# .clang-format
+---
+Language:        Cpp
+BasedOnStyle:   LLVM
+
+AlignConsecutiveDeclarations:
+  Enabled:                      true
+  AcrossEmptyLines:             false
+  AcrossComments:               true
+  AlignFunctionPointers:        false
