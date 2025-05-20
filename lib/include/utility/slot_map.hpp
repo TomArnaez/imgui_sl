@@ -14,8 +14,7 @@
  *  •  Dense, cache-friendly storage for trivially copyable types.
  *  •  32-bit handle packs <index, generation> for stale-handle detection.
  *=======================================================================================*/
-template <typename T,
-          std::size_t IndexBits = 24,
+template <typename T, std::size_t IndexBits = 24,
           std::size_t GenerationBits = 8,
           std::size_t MaxCapacity = (std::size_t{1} << IndexBits)>
 class slot_map {
@@ -110,6 +109,7 @@ public:
     return self.slots_[index].payload();
   }
 
+  [[nodiscard]]
   std::expected<std::monostate, error> remove(id handle) {
     // First ask the common helper to validate the handle.
     auto slotp = get_impl<T>(handle);
@@ -148,6 +148,8 @@ public:
 
   auto entries() { return entries_impl(*this); }
   auto entries() const { return entries_impl(*this); }
+
+  size_t constexpr capacity() const { return MaxCapacity; }
 
 private:
   struct slot {
